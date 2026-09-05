@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 struct SettingsView: View {
     var controller: DictationController
@@ -47,6 +48,7 @@ struct SettingsView: View {
 struct GeneralSettingsView: View {
     var controller: DictationController
     @State private var permissionsTick = 0
+    @State private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
         let settings = controller.settings
@@ -76,6 +78,19 @@ struct GeneralSettingsView: View {
             }
             Section("Output") {
                 Toggle("Keep dictated text in the clipboard after pasting", isOn: Binding(get: { settings.keepTextInClipboard }, set: { settings.keepTextInClipboard = $0 }))
+            }
+            Section("Startup") {
+                Toggle("Launch SimpleWhisper at login", isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.setEnabled($0) }))
+                HStack {
+                    Text(launchAtLogin.statusDescription).font(.caption).foregroundStyle(.secondary)
+                    if launchAtLogin.errorMessage != nil || SMAppService.mainApp.status == .requiresApproval {
+                        Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
+                            .controlSize(.small)
+                    }
+                }
+                if let error = launchAtLogin.errorMessage {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
             }
             Section("Permissions") {
                 permissionRow("Microphone", granted: Permissions.microphoneGranted) {
