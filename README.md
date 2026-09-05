@@ -19,6 +19,11 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   always corrected in the final text.
 - **Voice macros**: say “schowek” / “clipboard” to insert the clipboard content (captured when
   recording starts); “nowa linia” / “new line” for a line break; custom text macros.
+- **Spoken punctuation** (macros of type Punctuation, Polish + English): “przecinek”/“comma”,
+  “kropka”/“period”, “znak zapytania”, “wykrzyknik”, “dwukropek”, “średnik”, “myślnik”, “cudzysłów”,
+  “nawias otwarty/zamknięty”, “nowy akapit”/“new paragraph”. Marks are placed with proper spacing,
+  the next sentence is capitalised, and punctuation the model already inserted is merged rather than
+  doubled. One switch (Settings › Macros or the menu bar) turns it off when those words are meant literally.
 - **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
   Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
 

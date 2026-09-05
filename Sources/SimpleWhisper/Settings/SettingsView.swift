@@ -17,7 +17,7 @@ struct SettingsView: View {
             VocabularySettingsView(store: controller.store)
                 .tabItem { Label("Vocabulary", systemImage: "character.book.closed") }
                 .tag("vocabulary")
-            MacrosSettingsView(store: controller.store)
+            MacrosSettingsView(store: controller.store, settings: controller.settings)
                 .tabItem { Label("Macros", systemImage: "wand.and.stars") }
                 .tag("macros")
             AISettingsView(settings: controller.settings)
@@ -394,8 +394,8 @@ struct VocabularySettingsView: View {
                     store.vocabulary.append(term)
                     selection = term.id
                 },
-                remove: {},
-                canRemove: false
+                remove: { store.vocabulary.removeAll { $0.text.trimmingCharacters(in: .whitespaces).isEmpty } },
+                canRemove: store.vocabulary.contains { $0.text.trimmingCharacters(in: .whitespaces).isEmpty }
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -428,14 +428,20 @@ struct VocabularySettingsView: View {
 
 struct MacrosSettingsView: View {
     var store: DataStore
+    var settings: AppSettings
     @State private var selection: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Spoken keywords replaced in the dictated text. “Insert clipboard” pastes what was in the clipboard when recording started.")
+            Text("Spoken keywords replaced in the dictated text. “Insert clipboard” pastes what was in the clipboard when recording started. “Punctuation” inserts a mark with proper spacing (say “przecinek”, “kropka”, “new paragraph”…).")
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.horizontal, .top])
+            Toggle("Spoken punctuation", isOn: Binding(get: { settings.spokenPunctuationEnabled }, set: { settings.spokenPunctuationEnabled = $0 }))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal).padding(.top, 8)
             HStack {
                 Text("Keywords (comma-separated)").frame(width: 240, alignment: .leading)
                 Text("Action").frame(width: 150, alignment: .leading)
@@ -456,6 +462,12 @@ struct MacrosSettingsView: View {
                         .frame(width: 150)
                         if macro.action == .insertText {
                             TextField("Text to insert", text: textBinding(for: macro.id))
+                        } else if macro.action == .punctuation {
+                            TextField("Mark, e.g. , . ? or ⏎⏎", text: punctuationBinding(for: macro.id))
+                                .frame(width: 90)
+                                .font(.system(.body, design: .monospaced))
+                            Text(macro.text == VoiceMacro.paragraphMark ? "paragraph break" : "")
+                                .foregroundStyle(.tertiary).frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             Text("—").foregroundStyle(.tertiary).frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -477,8 +489,8 @@ struct MacrosSettingsView: View {
                     store.macros.append(macro)
                     selection = macro.id
                 },
-                remove: {},
-                canRemove: false
+                remove: { store.macros.removeAll { $0.keywords.isEmpty && $0.text.isEmpty } },
+                canRemove: store.macros.contains { $0.keywords.isEmpty && $0.text.isEmpty }
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -504,6 +516,21 @@ struct MacrosSettingsView: View {
         Binding(
             get: { store.macros.first { $0.id == id }?.text ?? "" },
             set: { value in if let i = index(of: id) { store.macros[i].text = value } }
+        )
+    }
+
+    /// Shows the paragraph mark as ⏎⏎ while storing "\n\n".
+    private func punctuationBinding(for id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                let text = store.macros.first { $0.id == id }?.text ?? ""
+                return text == VoiceMacro.paragraphMark ? "⏎⏎" : text
+            },
+            set: { value in
+                if let i = index(of: id) {
+                    store.macros[i].text = (value == "⏎⏎" || value == "⏎") ? VoiceMacro.paragraphMark : value
+                }
+            }
         )
     }
 }
@@ -605,6 +632,7 @@ private func listToolbar(add: @escaping () -> Void, remove: @escaping () -> Void
         Button(action: add) { Image(systemName: "plus") }
         Divider().frame(height: 16)
         Button(action: remove) { Image(systemName: "minus") }.disabled(!canRemove)
+            .help("Remove empty rows (use the trash icon to remove a specific row)")
         Spacer()
     }
     .buttonStyle(.borderless)

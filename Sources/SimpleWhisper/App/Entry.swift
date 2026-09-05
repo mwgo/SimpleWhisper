@@ -73,7 +73,7 @@ enum HUDDemo {
 enum DebugCLI {
     static let usage = """
     Usage: SimpleWhisper --transcribe <audio file> [--engine <kind>] [--language <mode>]
-                         [--prompt <name>] [--clipboard <text>] [--no-vocabulary]
+                         [--prompt <name>] [--clipboard <text>] [--no-vocabulary] [--no-punctuation]
 
       --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech
       --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
@@ -101,7 +101,9 @@ enum DebugCLI {
         let engineKind = value("--engine").flatMap(EngineKind.init(rawValue:)) ?? .whisperSmall
         let languageMode = value("--language").flatMap(LanguageMode.parse) ?? .default
         let store = DataStore()
-        let vocabulary = arguments.contains("--no-vocabulary") ? [] : store.effectiveVocabulary
+        let spokenPunctuation = !arguments.contains("--no-punctuation")
+        let macros = store.activeMacros(spokenPunctuation: spokenPunctuation)
+        let vocabulary = arguments.contains("--no-vocabulary") ? [] : store.effectiveVocabulary(spokenPunctuation: spokenPunctuation)
         let clipboard = value("--clipboard")
 
         do {
@@ -120,7 +122,7 @@ enum DebugCLI {
             print("Raw:       \(transcription.text)")
 
             var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
-            let expansion = MacroExpander.stage1(text, macros: store.macros, clipboard: clipboard)
+            let expansion = MacroExpander.stage1(text, macros: macros, clipboard: clipboard)
             text = expansion.text
             if expansion.clipboardWasEmpty { print("  [macro] clipboard was empty") }
 
@@ -138,7 +140,7 @@ enum DebugCLI {
                 print("AI (\(prompt.name), \(prompt.provider.rawValue)) in \(String(format: "%.1f", Date().timeIntervalSince(aiStarted))) s")
             }
 
-            text = MacroExpander.stage2(text, macros: store.macros, clipboard: clipboard)
+            text = MacroExpander.stage2(text, macros: macros, clipboard: clipboard)
             print("Final:     \(text)")
             return 0
         } catch {

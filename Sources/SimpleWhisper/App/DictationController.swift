@@ -224,14 +224,15 @@ final class DictationController: HotkeyMonitorDelegate {
             try Task.checkCancellation()
             hud.update(text: "Transcribing…", stage: .transcribing)
 
-            let vocabulary = store.effectiveVocabulary
+            let vocabulary = store.effectiveVocabulary(spokenPunctuation: settings.spokenPunctuationEnabled)
+            let macros = store.activeMacros(spokenPunctuation: settings.spokenPunctuationEnabled)
             let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
             try Task.checkCancellation()
 
             var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw DictationError.noSpeech }
 
-            let expansion = MacroExpander.stage1(text, macros: store.macros, clipboard: capturedClipboard)
+            let expansion = MacroExpander.stage1(text, macros: macros, clipboard: capturedClipboard)
             text = expansion.text
             let languageLabel = transcription.detectedLanguage?.uppercased()
 
@@ -263,7 +264,7 @@ final class DictationController: HotkeyMonitorDelegate {
                 if Task.isCancelled && state.phase == .idle { return }
             }
 
-            text = MacroExpander.stage2(text, macros: store.macros, clipboard: capturedClipboard)
+            text = MacroExpander.stage2(text, macros: macros, clipboard: capturedClipboard)
             state.lastText = text
             state.lastLanguage = transcription.detectedLanguage
             state.phase = .idle

@@ -90,6 +90,7 @@ struct MenuContent: View {
         Picker("Language", selection: Binding(get: { settings.languageMode }, set: { settings.languageMode = $0 })) {
             ForEach(settings.languageMenuOptions, id: \.self) { mode in Text(mode.title).tag(mode) }
         }
+        Toggle("Spoken punctuation", isOn: Binding(get: { settings.spokenPunctuationEnabled }, set: { settings.spokenPunctuationEnabled = $0 }))
         Picker("Prompt", selection: Binding<UUID?>(get: { settings.selectedPromptID }, set: { settings.selectedPromptID = $0 })) {
             Text("Plain text (no prompt)").tag(UUID?.none)
             ForEach(store.prompts) { prompt in Text(prompt.name).tag(UUID?.some(prompt.id)) }

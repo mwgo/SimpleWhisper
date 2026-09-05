@@ -18,6 +18,10 @@ final class AppSettings {
     var keepTextInClipboard: Bool {
         didSet { defaults.set(keepTextInClipboard, forKey: "keepTextInClipboard") }
     }
+    /// When off, punctuation macros ("przecinek", "comma", …) are left as ordinary words.
+    var spokenPunctuationEnabled: Bool {
+        didSet { defaults.set(spokenPunctuationEnabled, forKey: "spokenPunctuationEnabled") }
+    }
     var holdThresholdMs: Int {
         didSet { defaults.set(holdThresholdMs, forKey: "holdThresholdMs") }
     }
@@ -51,6 +55,7 @@ final class AppSettings {
         }
         selectedPromptID = defaults.string(forKey: "selectedPromptID").flatMap(UUID.init(uuidString:))
         keepTextInClipboard = defaults.object(forKey: "keepTextInClipboard") as? Bool ?? false
+        spokenPunctuationEnabled = defaults.object(forKey: "spokenPunctuationEnabled") as? Bool ?? true
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
@@ -75,13 +80,29 @@ final class DataStore {
         prompts = Self.load("prompts.json") ?? NamedPrompt.defaults
         vocabulary = Self.load("vocabulary.json") ?? VocabularyTerm.defaults
         macros = Self.load("macros.json") ?? VoiceMacro.defaults
+        seedPunctuationMacrosIfNeeded()
+    }
+
+    /// Adds the default punctuation macros once to macro files created before they existed.
+    private func seedPunctuationMacrosIfNeeded() {
+        let key = "punctuationMacrosSeeded"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        if !macros.contains(where: { $0.action == .punctuation }) {
+            macros.append(contentsOf: VoiceMacro.punctuationDefaults)
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// Macros in effect: punctuation macros are dropped when spoken punctuation is off.
+    func activeMacros(spokenPunctuation: Bool) -> [VoiceMacro] {
+        spokenPunctuation ? macros : macros.filter { $0.action != .punctuation }
     }
 
     /// Vocabulary passed to the speech engines: user terms plus macro keywords.
-    var effectiveVocabulary: [VocabularyTerm] {
+    func effectiveVocabulary(spokenPunctuation: Bool) -> [VocabularyTerm] {
         var terms = vocabulary.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
         let known = Set(terms.map { $0.text.lowercased() })
-        for macro in macros {
+        for macro in activeMacros(spokenPunctuation: spokenPunctuation) {
             for keyword in macro.keywords where !known.contains(keyword.lowercased()) && keyword.count >= 3 {
                 terms.append(VocabularyTerm(text: keyword))
             }
