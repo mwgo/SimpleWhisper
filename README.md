@@ -10,7 +10,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
 - **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels, **Control** runs the recording as a command.
 - **Launch at login** toggle (Settings › General › Startup) via the system Login Items mechanism.
 - **Menu bar only** (no Dock icon). A small green HUD appears next to the text caret (or top/bottom of
-  the screen, or hidden; Settings › General › HUD) while recording/transcribing; click it to pick a
+  the screen, or hidden; nine colour themes; Settings › General › HUD) while recording/transcribing; click it to pick a
   post-processing prompt.
 - **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
   Apple Speech. Models download on first use.

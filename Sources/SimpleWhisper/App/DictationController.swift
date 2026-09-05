@@ -184,6 +184,7 @@ final class DictationController: HotkeyMonitorDelegate {
         beginActivity()
         hud.placement = settings.hudPlacement
         hud.showsText = settings.hudShowsText
+        hud.theme = settings.hudTheme
         hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording, commandButton: settings.commandModeEnabled)
         state.hudAnchor = hud.anchorDescription
         DebugLog.write("HUD \(hud.anchorDebug ?? "-")")

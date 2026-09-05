@@ -25,6 +25,9 @@ final class AppSettings {
     var hudPlacement: HUDPlacement {
         didSet { defaults.set(hudPlacement.rawValue, forKey: "hudPlacement") }
     }
+    var hudTheme: HUDTheme {
+        didSet { defaults.set(hudTheme.rawValue, forKey: "hudTheme") }
+    }
     /// Show the status text ("Recording", "Processing · …") next to the animation.
     var hudShowsText: Bool {
         didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
@@ -79,6 +82,7 @@ final class AppSettings {
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
+        hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand

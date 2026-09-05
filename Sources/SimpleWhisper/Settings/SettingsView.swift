@@ -81,6 +81,28 @@ struct GeneralSettingsView: View {
                     ForEach(HUDPlacement.allCases) { placement in Text(placement.title).tag(placement) }
                 }
                 Toggle("Show status text (otherwise only the animation)", isOn: Binding(get: { settings.hudShowsText }, set: { settings.hudShowsText = $0 }))
+                LabeledContent("Colour") {
+                    HStack(spacing: 8) {
+                        ForEach(HUDTheme.allCases) { theme in
+                            Button {
+                                settings.hudTheme = theme
+                            } label: {
+                                Circle()
+                                    .fill(theme.background)
+                                    .frame(width: 22, height: 22)
+                                    .overlay(Circle().strokeBorder(Color.primary.opacity(settings.hudTheme == theme ? 0.9 : 0.15), lineWidth: settings.hudTheme == theme ? 2 : 1))
+                                    .overlay {
+                                        if settings.hudTheme == theme {
+                                            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.ink)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .help(theme.title)
+                        }
+                        Text(settings.hudTheme.title).font(.caption).foregroundStyle(.secondary).padding(.leading, 4)
+                    }
+                }
                 Text("The small green status capsule shown while recording and processing. “Near the text caret” falls back to the focused field, then to the bottom of the screen. With “Do not show” the menu bar icon is the only indicator; the ▶ command button is then unavailable, so run commands with the Control key or from the menu.")
                     .font(.caption).foregroundStyle(.secondary)
             }

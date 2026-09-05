@@ -51,6 +51,7 @@ enum HUDDemo {
         let controller = HUDWindowController()
         controller.placement = ProcessInfo.processInfo.environment["SW_HUD_PLACEMENT"].flatMap(HUDPlacement.init(rawValue:)) ?? .nearCaret
         controller.showsText = ProcessInfo.processInfo.environment["SW_HUD_NOTEXT"] == nil
+        controller.theme = ProcessInfo.processInfo.environment["SW_HUD_THEME"].flatMap(HUDTheme.init(rawValue:)) ?? .freshGreen
         hud = controller
         let stages: [(String, String?, HUDStage)] = [
             ("Recording", "Clean up", .recording),
