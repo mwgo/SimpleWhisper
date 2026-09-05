@@ -35,6 +35,10 @@ enum Entry {
             HistoryDemo.run()
             return
         }
+        if arguments.contains("--result-demo") {
+            ResultDemo.run()
+            return
+        }
         SimpleWhisperApp.main()
     }
 }
@@ -235,6 +239,22 @@ enum HistoryDemo {
         self.controller = controller
         controller.show()
         app.activate(ignoringOtherApps: true)
+        print("windowNumber=\(controller.windowNumber)")
+        app.run()
+    }
+}
+
+/// Shows the "no text field" result window for screenshots: `--result-demo`.
+@MainActor
+enum ResultDemo {
+    private static var controller: ResultWindowController?
+
+    static func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        let controller = ResultWindowController()
+        self.controller = controller
+        controller.show(text: "Dzisiaj testuję enova i Sonetę. Dodaj metodę GetValue do klasy PaymentService, a potem uruchom testy jednostkowe.")
         print("windowNumber=\(controller.windowNumber)")
         app.run()
     }

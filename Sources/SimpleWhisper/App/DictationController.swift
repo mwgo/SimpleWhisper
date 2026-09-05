@@ -25,6 +25,7 @@ final class DictationController: HotkeyMonitorDelegate {
     private let recorder = AudioRecorder()
     private let paster = TextPaster()
     private let hud = HUDWindowController()
+    private let resultWindow = ResultWindowController()
     private let hotkey = HotkeyMonitor()
     private var engines: [EngineKind: SpeechEngine] = [:]
     private var pipelineTask: Task<Void, Never>?
@@ -277,7 +278,7 @@ final class DictationController: HotkeyMonitorDelegate {
                     hud.flash("Could not re-select the previous text; result appended", duration: .seconds(2.5))
                 }
             }
-            await paster.paste(result, keepInClipboard: settings.keepTextInClipboard)
+            await deliver(result)
             endActivity()
         } catch is CancellationError {
             if state.phase != .idle {
@@ -288,6 +289,21 @@ final class DictationController: HotkeyMonitorDelegate {
         } catch {
             DebugLog.write("Command error: \(error)")
             showError(error.localizedDescription)
+        }
+    }
+
+    /// Pastes into the active text field, or, when nothing can accept a paste, leaves the text in the
+    /// clipboard and shows it in an editable window.
+    private func deliver(_ text: String) async {
+        if PasteTargetProbe.canPasteIntoFocusedElement() {
+            await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
+        } else {
+            DebugLog.write("No editable field focused; showing result window")
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            hud.hide()
+            resultWindow.show(text: text)
         }
     }
 
@@ -304,8 +320,7 @@ final class DictationController: HotkeyMonitorDelegate {
     func pasteHistoryEntry(_ entry: HistoryEntry) {
         paster.rememberTarget()
         Task { [weak self] in
-            guard let self else { return }
-            await self.paster.paste(entry.text, keepInClipboard: self.settings.keepTextInClipboard)
+            await self?.deliver(entry.text)
         }
     }
 
@@ -408,7 +423,7 @@ final class DictationController: HotkeyMonitorDelegate {
             } else {
                 hud.hide()
             }
-            await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
+            await deliver(text)
             endActivity()
         } catch is CancellationError {
             if state.phase != .idle {

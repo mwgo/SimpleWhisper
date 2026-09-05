@@ -8,6 +8,8 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
 ## Features
 
 - **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels, **Control** runs the recording as a command.
+- **No text field active?** The result stays in the clipboard and opens in a small editable window
+  with the text pre-selected.
 - **Launch at login** toggle (Settings › General › Startup) via the system Login Items mechanism.
 - **Menu bar only** (no Dock icon). A small green HUD appears next to the text caret (or top/bottom of
   the screen, or hidden; nine colour themes; Settings › General › HUD) while recording/transcribing; click it to pick a
