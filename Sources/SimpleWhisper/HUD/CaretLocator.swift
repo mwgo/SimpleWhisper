@@ -6,9 +6,28 @@ import ApplicationServices
 /// 1. below the text caret of the focused element (Accessibility, works in native text views),
 /// 2. relative to the focused element's frame (text fields, editors without caret bounds),
 /// 3. bottom-centre of the screen.
+/// Where the HUD is shown (Settings › General).
+enum HUDPlacement: String, CaseIterable, Codable, Identifiable {
+    case nearCaret
+    case topCenter
+    case bottomCenter
+    case hidden
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .nearCaret: return "Near the text caret"
+        case .topCenter: return "Top of the screen, centred"
+        case .bottomCenter: return "Bottom of the screen, centred"
+        case .hidden: return "Do not show"
+        }
+    }
+}
+
 enum CaretLocator {
     enum Source: String {
-        case caret, focusedElement, screen
+        case caret, focusedElement, screen, screenTop
     }
 
     struct Anchor {
@@ -21,8 +40,19 @@ enum CaretLocator {
     }
 
     @MainActor
-    static func anchor() -> Anchor {
+    static func anchor(placement: HUDPlacement = .nearCaret) -> Anchor {
         let appName = NSWorkspace.shared.frontmostApplication?.localizedName
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let visible = screen.visibleFrame
+        switch placement {
+        // Centre on the full display width (visibleFrame excludes a side Dock and would shift the HUD).
+        case .topCenter:
+            return Anchor(point: CGPoint(x: screen.frame.midX, y: visible.maxY - 12), source: .screenTop, appName: appName, debug: "placement=top")
+        case .bottomCenter:
+            return Anchor(point: CGPoint(x: screen.frame.midX, y: visible.minY + 48), source: .screen, appName: appName, debug: "placement=bottom")
+        case .hidden, .nearCaret:
+            break
+        }
         var debug: [String] = ["ax=\(Permissions.accessibilityGranted)"]
         if Permissions.accessibilityGranted, let focused = focusedElement() {
             debug.append("role=\(stringAttribute(kAXRoleAttribute, of: focused) ?? "?")")
@@ -44,10 +74,8 @@ enum CaretLocator {
         } else {
             debug.append("no focused element")
         }
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let visible = screen.visibleFrame
         debug.append("→ screen")
-        return Anchor(point: CGPoint(x: visible.midX, y: visible.minY + 48), source: .screen, appName: appName, debug: debug.joined(separator: " "))
+        return Anchor(point: CGPoint(x: screen.frame.midX, y: visible.minY + 48), source: .screen, appName: appName, debug: debug.joined(separator: " "))
     }
 
     private static func describe(_ rect: CGRect) -> String {

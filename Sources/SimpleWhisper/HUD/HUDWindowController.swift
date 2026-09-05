@@ -14,6 +14,8 @@ final class HUDWindowController: NSObject {
     private let hostingView: NSHostingView<HUDView>
     private var hideTask: Task<Void, Never>?
     private var anchor: CaretLocator.Anchor?
+    /// Set by the controller from settings before each show.
+    var placement: HUDPlacement = .nearCaret
 
     override init() {
         panel = NSPanel(
@@ -42,11 +44,11 @@ final class HUDWindowController: NSObject {
 
     func show(text: String, detail: String? = nil, stage: HUDStage, commandButton: Bool = false) {
         hideTask?.cancel()
-        anchor = CaretLocator.anchor()
+        anchor = CaretLocator.anchor(placement: placement)
         model.showsCommandButton = commandButton
         model.resetLevels()
         update(text: text, detail: detail, stage: stage)
-        panel.orderFrontRegardless()
+        if placement != .hidden { panel.orderFrontRegardless() }
     }
 
     func update(text: String, detail: String? = nil, stage: HUDStage) {
@@ -58,6 +60,8 @@ final class HUDWindowController: NSObject {
             model.resetLevels()
         }
         layout()
+        // SwiftUI resizes the capsule asynchronously; re-centre once the new size is known.
+        DispatchQueue.main.async { [weak self] in self?.layout() }
     }
 
     /// Feeds the microphone level (0…1) to the recording animation.
@@ -68,8 +72,9 @@ final class HUDWindowController: NSObject {
 
     /// Shows a short message, then hides.
     func flash(_ text: String, duration: Duration = .seconds(1.2)) {
+        guard placement != .hidden else { return }
         if !panel.isVisible {
-            anchor = CaretLocator.anchor()
+            anchor = CaretLocator.anchor(placement: placement)
             panel.orderFrontRegardless()
         }
         update(text: text, detail: nil, stage: .message)
@@ -101,12 +106,15 @@ final class HUDWindowController: NSObject {
     }
 
     private func layout() {
+        hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
         guard let anchor else { return }
         var origin: CGPoint
         switch anchor.source {
         case .screen:
             origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y)
+        case .screenTop:
+            origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y - size.height)
         case .caret, .focusedElement:
             origin = CGPoint(x: anchor.point.x, y: anchor.point.y - 10 - size.height)
         }

@@ -49,6 +49,7 @@ enum HUDDemo {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let controller = HUDWindowController()
+        controller.placement = ProcessInfo.processInfo.environment["SW_HUD_PLACEMENT"].flatMap(HUDPlacement.init(rawValue:)) ?? .nearCaret
         hud = controller
         let stages: [(String, String?, HUDStage)] = [
             ("Recording", "Clean up", .recording),
@@ -205,7 +206,7 @@ enum SettingsDemo {
         app.setActivationPolicy(.regular)
         let controller = DictationController()
         self.controller = controller
-        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 700, height: 480),
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 760, height: 500),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Settings (demo)"
         window.contentView = NSHostingView(rootView: SettingsView(controller: controller))

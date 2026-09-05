@@ -11,6 +11,9 @@ struct SettingsView: View {
             GeneralSettingsView(controller: controller)
                 .tabItem { Label("General", systemImage: "gear") }
                 .tag("general")
+            LanguageSettingsView(settings: controller.settings)
+                .tabItem { Label("Languages", systemImage: "globe") }
+                .tag("languages")
             PromptsSettingsView(store: controller.store, settings: controller.settings)
                 .tabItem { Label("Prompts", systemImage: "text.bubble") }
                 .tag("prompts")
@@ -27,12 +30,12 @@ struct SettingsView: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
                 .tag("about")
         }
-        .frame(width: 700, height: 480)
+        .frame(width: 760, height: 500)
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
         .task {
             // Developer aid: SW_SETTINGS_CYCLE=1 switches tabs every second (crash test for --settings-demo).
             guard ProcessInfo.processInfo.environment["SW_SETTINGS_CYCLE"] != nil else { return }
-            let tabs = ["general", "prompts", "vocabulary", "macros", "ai", "about"]
+            let tabs = ["general", "languages", "prompts", "vocabulary", "macros", "ai", "about"]
             var index = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -67,13 +70,17 @@ struct GeneralSettingsView: View {
                     Text(state.modelStatus).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Section("Language") {
-                LanguageSettingsSection(settings: settings)
-            }
             Section("Hotkey") {
                 Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels.")
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.startHotkey() }), in: 200...1000, step: 50)
                 Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("HUD") {
+                Picker("Position", selection: Binding(get: { settings.hudPlacement }, set: { settings.hudPlacement = $0 })) {
+                    ForEach(HUDPlacement.allCases) { placement in Text(placement.title).tag(placement) }
+                }
+                Text("The small green status capsule shown while recording and processing. “Near the text caret” falls back to the focused field, then to the bottom of the screen. With “Do not show” the menu bar icon is the only indicator (the ▶ command button is then unavailable; use the menu).")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Output") {
@@ -139,6 +146,19 @@ struct GeneralSettingsView: View {
 
 // MARK: - Language
 
+struct LanguageSettingsView: View {
+    var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section("Recognition language") {
+                LanguageSettingsSection(settings: settings)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
 struct LanguageSettingsSection: View {
     var settings: AppSettings
     @State private var filter = ""
@@ -202,7 +222,7 @@ struct LanguageSettingsSection: View {
                     }
                     .padding(8)
                 }
-                .frame(height: 170)
+                .frame(height: 230)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 Text("Selected: " + settings.selectedLanguages.map { LanguageCatalog.name(for: $0) }.joined(separator: ", "))
                     .font(.caption).foregroundStyle(.secondary)

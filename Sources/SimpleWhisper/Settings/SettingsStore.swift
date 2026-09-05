@@ -22,6 +22,9 @@ final class AppSettings {
     var commandModeEnabled: Bool {
         didSet { defaults.set(commandModeEnabled, forKey: "commandModeEnabled") }
     }
+    var hudPlacement: HUDPlacement {
+        didSet { defaults.set(hudPlacement.rawValue, forKey: "hudPlacement") }
+    }
     /// Keeps the last dictations/commands in the History submenu.
     var historyEnabled: Bool {
         didSet { defaults.set(historyEnabled, forKey: "historyEnabled") }
@@ -70,6 +73,7 @@ final class AppSettings {
         spokenPunctuationEnabled = defaults.object(forKey: "spokenPunctuationEnabled") as? Bool ?? true
         commandModeEnabled = defaults.object(forKey: "commandModeEnabled") as? Bool ?? false
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
+        hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand
