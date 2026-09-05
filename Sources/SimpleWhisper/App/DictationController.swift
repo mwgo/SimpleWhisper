@@ -10,7 +10,7 @@ enum DictationError: LocalizedError {
         switch self {
         case .tooShort: return "Recording too short."
         case .noSpeech: return "No speech recognized."
-        case .noSelection: return "No text selected in the editor."
+        case .noSelection: return "No text selected and nothing dictated yet."
         }
     }
 }
@@ -210,11 +210,22 @@ final class DictationController: HotkeyMonitorDelegate {
     private func runCommandPipeline(samples: [Float]) async {
         do {
             guard samples.count >= Int(AudioRecorder.targetFormat.sampleRate) / 3 else { throw DictationError.tooShort }
-            let selection = await SelectionReader.selectedText(in: paster.targetApplication)
+            var selection = await SelectionReader.selectedText(in: paster.targetApplication)
             try Task.checkCancellation()
-            guard let selection, !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw DictationError.noSelection
+            // No selection: the command refers to the text that was just pasted; select it so the result replaces it.
+            var usesLastPaste = false
+            let normalize: (String) -> String = { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            // Some editors (VS Code) copy the whole line when nothing is selected; if that equals the
+            // last paste, treat it as "no selection" so the previous text gets replaced.
+            if let current = selection, !state.lastText.isEmpty, normalize(current) == normalize(state.lastText) {
+                selection = nil
             }
+            if selection?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+                guard !state.lastText.isEmpty else { throw DictationError.noSelection }
+                selection = state.lastText
+                usesLastPaste = true
+            }
+            guard let selection else { throw DictationError.noSelection }
             hud.update(text: "Transcribing command…", stage: .transcribing)
             let engine = try await ensureEngine(settings.engineKind)
             try Task.checkCancellation()
@@ -240,7 +251,11 @@ final class DictationController: HotkeyMonitorDelegate {
             }
             defer { ticker.cancel() }
             let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
-            let result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
+            let result: String
+            do {
+                result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
+            }
+            ticker.cancel()   // otherwise a late tick would re-show the HUD after hide()
             try Task.checkCancellation()
 
             state.lastText = result
@@ -248,6 +263,13 @@ final class DictationController: HotkeyMonitorDelegate {
             state.phase = .idle
             recordHistory(HistoryEntry(date: Date(), kind: .command, text: result, instruction: instruction, language: transcription.detectedLanguage))
             hud.hide()
+            if usesLastPaste {
+                let selected = await SelectionReader.selectBackwards(expected: selection, in: paster.targetApplication)
+                DebugLog.write("Command: re-selected last paste (\(selection.count) chars) = \(selected)")
+                if !selected {
+                    hud.flash("Could not re-select the previous text; result appended", duration: .seconds(2.5))
+                }
+            }
             await paster.paste(result, keepInClipboard: settings.keepTextInClipboard)
             endActivity()
         } catch is CancellationError {
@@ -355,9 +377,11 @@ final class DictationController: HotkeyMonitorDelegate {
                 defer { ticker.cancel() }
                 do {
                     text = try await makeProcessor(for: prompt).process(text: text, instructions: instructions)
+                    ticker.cancel()
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
+                    ticker.cancel()
                     state.lastError = error.localizedDescription
                     DebugLog.write("AI failed (\(prompt.name), \(prompt.provider.rawValue), cmd=\(prompt.shellCommand)): \(error)")
                     hud.update(text: "AI failed, pasting raw text", stage: .message)

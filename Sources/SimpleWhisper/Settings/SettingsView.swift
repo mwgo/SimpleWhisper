@@ -94,7 +94,7 @@ struct GeneralSettingsView: View {
             }
             Section("Command mode") {
                 Toggle("Enable command mode (▶ button in the HUD)", isOn: Binding(get: { settings.commandModeEnabled }, set: { settings.commandModeEnabled = $0 }))
-                Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD. The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection.")
+                Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD. The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection. With nothing selected, the command applies to the text you just dictated, which is re-selected and replaced.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Startup") {
