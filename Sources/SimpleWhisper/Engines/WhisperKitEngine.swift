@@ -13,7 +13,21 @@ final class WhisperKitEngine: SpeechEngine {
 
     func prepare(status: @escaping EngineStatusHandler) async throws {
         if whisperKit != nil { return }
-        status("Downloading \(kind.title)…")
+        status(isDownloaded ? "Loading \(kind.title)… (first load compiles the model)" : "Downloading \(kind.title)…")
+        do {
+            whisperKit = try await load()
+        } catch {
+            // An interrupted download leaves *.incomplete files that WhisperKit cannot resume from.
+            // Wipe the partial model and try once more.
+            DebugLog.write("WhisperKit load failed (\(error.localizedDescription)); clearing partial download and retrying")
+            removePartialDownload()
+            status("Retrying download of \(kind.title)…")
+            whisperKit = try await load()
+        }
+        status("Model ready")
+    }
+
+    private func load() async throws -> WhisperKit {
         let config = WhisperKitConfig(
             model: kind.whisperVariant,
             verbose: false,
@@ -22,9 +36,28 @@ final class WhisperKitEngine: SpeechEngine {
             load: true,
             download: true
         )
-        let kit = try await WhisperKit(config)
-        whisperKit = kit
-        status("Model ready")
+        return try await WhisperKit(config)
+    }
+
+    private static let modelsBase = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
+
+    private var modelFolder: URL? {
+        kind.whisperVariant.map { Self.modelsBase.appendingPathComponent("openai_whisper-\($0)") }
+    }
+
+    /// True when the model files are already on disk (the decoder weights are the last thing written).
+    var isDownloaded: Bool {
+        guard let folder = modelFolder else { return false }
+        let weights = folder.appendingPathComponent("TextDecoder.mlmodelc/weights/weight.bin")
+        return FileManager.default.fileExists(atPath: weights.path)
+    }
+
+    private func removePartialDownload() {
+        guard let folder = modelFolder else { return }
+        for url in [folder, Self.modelsBase.appendingPathComponent(".cache/huggingface/download/\(folder.lastPathComponent)")] {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     func transcribe(samples: [Float], language: LanguageMode, vocabulary: [VocabularyTerm]) async throws -> Transcription {
@@ -58,11 +91,23 @@ final class WhisperKitEngine: SpeechEngine {
             promptTokens: promptTokens,
             chunkingStrategy: .vad
         )
-        let results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
-        let text = results.map(\.text).joined(separator: " ")
-            .replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
+        var text = Self.joinedText(results)
+        if text.isEmpty, promptTokens != nil {
+            // Some variants (large-v3 turbo) return nothing when a vocabulary prompt is supplied.
+            var plain = options
+            plain.promptTokens = nil
+            results = try await kit.transcribe(audioArray: samples, decodeOptions: plain)
+            text = Self.joinedText(results)
+            debugInfo = (debugInfo ?? "") + " (retried without vocabulary prompt)"
+        }
         let detected = languageCode ?? results.first?.language
         return Transcription(text: text, detectedLanguage: detected, debugInfo: debugInfo)
+    }
+
+    private static func joinedText(_ results: [TranscriptionResult]) -> String {
+        results.map(\.text).joined(separator: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

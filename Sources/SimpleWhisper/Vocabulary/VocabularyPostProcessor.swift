@@ -3,15 +3,20 @@ import Foundation
 /// Replaces known misrecognitions (aliases) with the canonical spelling, engine-independent.
 enum VocabularyPostProcessor {
     static func apply(_ text: String, terms: [VocabularyTerm]) -> String {
-        var output = text
+        // Longest aliases first, so "enowa 365" wins over "enowa" and does not leave "enova365 365".
+        var pairs: [(alias: String, canonical: String)] = []
         for term in terms {
             let canonical = term.text.trimmingCharacters(in: .whitespaces)
             guard !canonical.isEmpty else { continue }
             for alias in term.aliases {
                 let trimmed = alias.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty, trimmed.lowercased() != canonical.lowercased() else { continue }
-                output = WordMatcher.replace(word: trimmed, in: output) { _ in canonical }
+                pairs.append((trimmed, canonical))
             }
+        }
+        var output = text
+        for pair in pairs.sorted(by: { $0.alias.count > $1.alias.count }) {
+            output = WordMatcher.replace(word: pair.alias, in: output) { _ in pair.canonical }
         }
         return output
     }

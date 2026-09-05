@@ -14,7 +14,7 @@ struct VocabularyTerm: Codable, Identifiable, Equatable, Hashable {
     }
 
     static let defaults: [VocabularyTerm] = [
-        VocabularyTerm(text: "enova365", aliases: ["enowa", "e nova", "enova 365", "nowa 365", "nowe 365"]),
+        VocabularyTerm(text: "enova365", aliases: ["enowa", "e nova", "enova 365", "enowa 365", "nowa 365", "nowe 365"]),
         VocabularyTerm(text: "Soneta", aliases: ["sonata", "sonety"]),
     ]
 }
