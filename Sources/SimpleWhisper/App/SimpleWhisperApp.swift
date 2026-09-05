@@ -98,6 +98,10 @@ struct MenuContent: View {
             Text("Plain text (no prompt)").tag(UUID?.none)
             ForEach(store.prompts) { prompt in Text(prompt.name).tag(UUID?.some(prompt.id)) }
         }
+        if settings.historyEnabled {
+            Button("History…") { controller.showHistory() }
+                .keyboardShortcut("h")
+        }
         Divider()
 
         SettingsLink { Text("Settings…") }

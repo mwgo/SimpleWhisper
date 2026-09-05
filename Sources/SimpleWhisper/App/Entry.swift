@@ -31,6 +31,10 @@ enum Entry {
             SettingsDemo.run()
             return
         }
+        if arguments.contains("--history-demo") {
+            HistoryDemo.run()
+            return
+        }
         SimpleWhisperApp.main()
     }
 }
@@ -209,6 +213,26 @@ enum SettingsDemo {
         self.window = window
         app.activate(ignoringOtherApps: true)
         print("windowNumber=\(window.windowNumber)")
+        app.run()
+    }
+}
+
+/// Opens the History window for screenshots: `--history-demo` (use SW_DATA_DIR for sample data).
+@MainActor
+enum HistoryDemo {
+    private static var controller: HistoryWindowController?
+    private static var store: DataStore?
+
+    static func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        let store = DataStore()
+        self.store = store
+        let controller = HistoryWindowController(store: store, onCopy: { _ in }, onPaste: { _ in })
+        self.controller = controller
+        controller.show()
+        app.activate(ignoringOtherApps: true)
+        print("windowNumber=\(controller.windowNumber)")
         app.run()
     }
 }

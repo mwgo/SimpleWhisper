@@ -29,6 +29,11 @@ final class DictationController: HotkeyMonitorDelegate {
     private var engines: [EngineKind: SpeechEngine] = [:]
     private var pipelineTask: Task<Void, Never>?
     private var hotkeyRetryTask: Task<Void, Never>?
+    private lazy var historyWindow = HistoryWindowController(
+        store: store,
+        onCopy: { [weak self] entry in self?.copyHistoryEntry(entry) },
+        onPaste: { [weak self] entry in self?.pasteHistoryEntry(entry) }
+    )
     private var capturedClipboard: String?
     /// Keeps the process out of App Nap while a dictation is in flight (otherwise the paste
     /// after a long AI step waits until the user clicks something).
@@ -239,6 +244,7 @@ final class DictationController: HotkeyMonitorDelegate {
             state.lastText = result
             state.lastLanguage = transcription.detectedLanguage
             state.phase = .idle
+            recordHistory(HistoryEntry(date: Date(), kind: .command, text: result, instruction: instruction, language: transcription.detectedLanguage))
             hud.hide()
             await paster.paste(result, keepInClipboard: settings.keepTextInClipboard)
             endActivity()
@@ -252,6 +258,32 @@ final class DictationController: HotkeyMonitorDelegate {
             DebugLog.write("Command error: \(error)")
             showError(error.localizedDescription)
         }
+    }
+
+    private func recordHistory(_ entry: HistoryEntry) {
+        guard settings.historyEnabled else { return }
+        store.addHistory(entry)
+    }
+
+    func showHistory() {
+        historyWindow.show()
+    }
+
+    /// Pastes the entry's text into the frontmost editor (the history panel never takes focus).
+    func pasteHistoryEntry(_ entry: HistoryEntry) {
+        paster.rememberTarget()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.paster.paste(entry.text, keepInClipboard: self.settings.keepTextInClipboard)
+        }
+    }
+
+    /// Puts the entry's text on the clipboard and confirms in the HUD.
+    func copyHistoryEntry(_ entry: HistoryEntry) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(entry.text, forType: .string)
+        hud.flash("Copied to clipboard", duration: .seconds(1.5))
     }
 
     func cancel() {
@@ -336,6 +368,7 @@ final class DictationController: HotkeyMonitorDelegate {
             state.lastText = text
             state.lastLanguage = transcription.detectedLanguage
             state.phase = .idle
+            recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: transcription.detectedLanguage))
 
             if expansion.clipboardWasEmpty {
                 hud.flash("Clipboard was empty", duration: .seconds(2))

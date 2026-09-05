@@ -22,6 +22,10 @@ final class AppSettings {
     var commandModeEnabled: Bool {
         didSet { defaults.set(commandModeEnabled, forKey: "commandModeEnabled") }
     }
+    /// Keeps the last dictations/commands in the History submenu.
+    var historyEnabled: Bool {
+        didSet { defaults.set(historyEnabled, forKey: "historyEnabled") }
+    }
     /// When off, punctuation macros ("przecinek", "comma", …) are left as ordinary words.
     var spokenPunctuationEnabled: Bool {
         didSet { defaults.set(spokenPunctuationEnabled, forKey: "spokenPunctuationEnabled") }
@@ -65,6 +69,7 @@ final class AppSettings {
         keepTextInClipboard = defaults.object(forKey: "keepTextInClipboard") as? Bool ?? false
         spokenPunctuationEnabled = defaults.object(forKey: "spokenPunctuationEnabled") as? Bool ?? true
         commandModeEnabled = defaults.object(forKey: "commandModeEnabled") as? Bool ?? false
+        historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand
@@ -78,8 +83,15 @@ final class DataStore {
     var prompts: [NamedPrompt] { didSet { save(prompts, to: "prompts.json") } }
     var vocabulary: [VocabularyTerm] { didSet { save(vocabulary, to: "vocabulary.json") } }
     var macros: [VoiceMacro] { didSet { save(macros, to: "macros.json") } }
+    var history: [HistoryEntry] { didSet { save(history, to: "history.json") } }
 
     static let directory: URL = {
+        // SW_DATA_DIR overrides the data folder (used by the demo/test modes).
+        if let override = ProcessInfo.processInfo.environment["SW_DATA_DIR"], !override.isEmpty {
+            let dir = URL(fileURLWithPath: override, isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = base.appendingPathComponent("SimpleWhisper", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -90,8 +102,18 @@ final class DataStore {
         prompts = Self.load("prompts.json") ?? NamedPrompt.defaults
         vocabulary = Self.load("vocabulary.json") ?? VocabularyTerm.defaults
         macros = Self.load("macros.json") ?? VoiceMacro.defaults
+        history = Self.load("history.json") ?? []
         seedPunctuationMacrosIfNeeded()
     }
+
+    func addHistory(_ entry: HistoryEntry) {
+        history.insert(entry, at: 0)
+        if history.count > HistoryEntry.maxStored { history.removeLast(history.count - HistoryEntry.maxStored) }
+    }
+
+    /// Entries shown in the menu (newest first).
+    var recentHistory: [HistoryEntry] { Array(history.prefix(HistoryEntry.maxShown)) }
+
 
     /// Adds the default punctuation macros once to macro files created before they existed.
     private func seedPunctuationMacrosIfNeeded() {

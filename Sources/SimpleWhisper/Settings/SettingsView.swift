@@ -79,6 +79,11 @@ struct GeneralSettingsView: View {
             Section("Output") {
                 Toggle("Keep dictated text in the clipboard after pasting", isOn: Binding(get: { settings.keepTextInClipboard }, set: { settings.keepTextInClipboard = $0 }))
             }
+            Section("History") {
+                Toggle("Keep a history of recent dictations and commands", isOn: Binding(get: { settings.historyEnabled }, set: { settings.historyEnabled = $0 }))
+                Text("“History…” in the menu bar opens a window with the last 10 entries (date, text). Clicking an entry copies its text to the clipboard. Stored locally in history.json.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Command mode") {
                 Toggle("Enable command mode (▶ button in the HUD)", isOn: Binding(get: { settings.commandModeEnabled }, set: { settings.commandModeEnabled = $0 }))
                 Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD. The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection.")

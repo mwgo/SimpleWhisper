@@ -28,6 +28,8 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   it (“convert to markdown”, “translate to English”, “make it shorter”) and click the round ▶ button in the
   HUD. The selection is read (Accessibility, or ⌘C), sent to the AI command with your instruction, and the
   result replaces the selection.
+- **History** (opt-in, Settings › General): “History…” in the menu bar opens a floating window with the last 10
+  dictations and commands (date + wrapped text). Clicking a card copies it to the clipboard; ▶ pastes it into the active editor.
 - **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
   Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
 
@@ -95,7 +97,7 @@ Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enov
 - The app is signed ad-hoc with a designated requirement based only on the bundle identifier, so
   Accessibility / Input Monitoring grants survive rebuilds. If they ever get stuck, run
   `tccutil reset Accessibility pl.wojas.SimpleWhisper` (and `ListenEvent`, `PostEvent`, `Microphone`).
-- Not yet implemented: live text while speaking, configurable hotkey, transcription history.
+- Not yet implemented: live text while speaking, configurable hotkey.
 
 ## Project layout
 
