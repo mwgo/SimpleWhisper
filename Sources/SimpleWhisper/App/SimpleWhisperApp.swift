@@ -64,8 +64,6 @@ struct MenuContent: View {
 
         Text(state.phase.title)
         if state.isModelLoading { Text(state.modelStatus) }
-        if let summary = state.lastSummary { Text(summary) }
-        if let anchor = state.hudAnchor { Text("HUD position: \(anchor)") }
         if let error = state.lastError { Text("⚠︎ \(error)") }
         if let hotkeyError = state.hotkeyError {
             Text("⚠︎ \(hotkeyError)")
