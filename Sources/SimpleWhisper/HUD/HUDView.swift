@@ -48,16 +48,20 @@ struct HUDView: View {
         HStack(spacing: 10) {
             indicator
                 .frame(width: 34, height: 18)
-            if model.showsText || model.stage == .message {
+            let showsStatus = model.showsText || model.stage == .message
+            if showsStatus {
                 Text(model.text)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .lineLimit(1)
-                if let detail = model.detail, !detail.isEmpty {
-                    Text("· \(detail)")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .opacity(0.8)
-                        .lineLimit(1)
-                }
+            }
+            // The prompt/detail line is always shown, even in animation-only mode.
+            if let detail = model.detail, !detail.isEmpty {
+                Text(showsStatus ? "· \(detail)" : detail)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .opacity(0.8)
+                    .lineLimit(1)
+            }
+            if showsStatus || !(model.detail ?? "").isEmpty {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .bold))
                     .opacity(0.7)
