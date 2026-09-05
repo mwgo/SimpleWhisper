@@ -266,6 +266,11 @@ enum ResultDemo {
         - enova
         - Soneta
 
+        | Silnik | Język | Czas |
+        |---|---|---|
+        | Whisper Turbo | PL | 1,5 s |
+        | Parakeet v3 | PL/EN | 0,3 s |
+
         ```swift
         func getValue() -> Int { 42 }
         ```

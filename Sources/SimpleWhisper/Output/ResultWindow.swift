@@ -1,11 +1,14 @@
 import AppKit
+import WebKit
 
 /// Shown when there is no text field to paste into. Markdown-looking text is rendered; the source
 /// stays editable behind a Rendered/Source switch. Nothing is copied automatically (use Copy).
 @MainActor
-final class ResultWindowController: NSObject {
+final class ResultWindowController: NSObject, WKNavigationDelegate {
     private var window: NSWindow?
     private var textView: NSTextView?
+    private var scrollView: NSScrollView?
+    private var webView: WKWebView?
     private var modeControl: NSSegmentedControl?
     private var hint: NSTextField?
     private var sourceText = ""
@@ -28,9 +31,10 @@ final class ResultWindowController: NSObject {
     private func applyMode() {
         guard let textView else { return }
         let rendered = isMarkdown && modeControl?.selectedSegment == 0
+        webView?.isHidden = !rendered
+        scrollView?.isHidden = rendered
         if rendered {
-            textView.textStorage?.setAttributedString(MarkdownRenderer.render(sourceText))
-            textView.isEditable = false
+            webView?.loadHTMLString(MarkdownRenderer.html(from: sourceText), baseURL: nil)
         } else {
             textView.textStorage?.setAttributedString(NSAttributedString(string: sourceText, attributes: [
                 .font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.labelColor,
@@ -38,8 +42,8 @@ final class ResultWindowController: NSObject {
             textView.isEditable = true
             window?.makeFirstResponder(textView)
             textView.setSelectedRange(NSRange(location: 0, length: 0))
+            textView.scrollToBeginningOfDocument(nil)
         }
-        textView.scrollToBeginningOfDocument(nil)
     }
 
     @objc private func modeChanged(_ sender: NSSegmentedControl) {
@@ -62,6 +66,16 @@ final class ResultWindowController: NSObject {
     }
 
     var windowNumber: Int { window?.windowNumber ?? 0 }
+
+    /// Open links in the default browser instead of navigating inside the result view.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
+        }
+    }
 
     private func buildWindowIfNeeded() {
         guard window == nil else { return }
@@ -86,6 +100,30 @@ final class ResultWindowController: NSObject {
         textView.allowsUndo = true
         textView.isSelectable = true
         self.textView = textView
+        self.scrollView = scroll
+
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = self
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.underPageBackgroundColor = .clear
+        self.webView = webView
+
+        let pages = NSView()
+        pages.translatesAutoresizingMaskIntoConstraints = false
+        for view in [scroll, webView] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            pages.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: pages.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: pages.trailingAnchor),
+                view.topAnchor.constraint(equalTo: pages.topAnchor),
+                view.bottomAnchor.constraint(equalTo: pages.bottomAnchor),
+            ])
+        }
+        webView.wantsLayer = true
+        webView.layer?.cornerRadius = 6
+        webView.layer?.masksToBounds = true
 
         let mode = NSSegmentedControl(labels: ["Rendered", "Source"], trackingMode: .selectOne, target: self, action: #selector(modeChanged(_:)))
         mode.selectedSegment = 0
@@ -107,7 +145,7 @@ final class ResultWindowController: NSObject {
         let bottom = NSStackView(views: [mode, NSView(), closeButton, copyButton])
         bottom.orientation = .horizontal
         bottom.spacing = 8
-        let stack = NSStackView(views: [scroll, hint, bottom])
+        let stack = NSStackView(views: [pages, hint, bottom])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -123,7 +161,7 @@ final class ResultWindowController: NSObject {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             stack.topAnchor.constraint(equalTo: content.topAnchor),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            scroll.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
+            pages.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
             hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
             bottom.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
         ])

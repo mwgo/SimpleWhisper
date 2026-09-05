@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Markdown
 
 /// Heuristics and rendering for Markdown shown in the result window.
 enum MarkdownRenderer {
@@ -24,103 +25,35 @@ enum MarkdownRenderer {
         return strong >= 1 || weak >= 2
     }
 
-    /// Renders Markdown into an attributed string with headings, lists, code blocks, quotes, emphasis and links.
-    static func render(_ markdown: String) -> NSAttributedString {
-        let options = AttributedString.MarkdownParsingOptions(allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
-        guard let parsed = try? AttributedString(markdown: markdown, options: options) else {
-            return NSAttributedString(string: markdown, attributes: [.font: baseFont, .foregroundColor: NSColor.labelColor])
-        }
-
-        let output = NSMutableAttributedString()
-        var previousBlockID: Int? = nil
-        var orderedCounters: [Int: Int] = [:]
-
-        for run in parsed.runs {
-            let text = String(parsed[run.range].characters)
-            let intent = run.presentationIntent
-            let blockID = intent?.components.first?.identity
-
-            var font = baseFont
-            var color = NSColor.labelColor
-            var paragraph = NSMutableParagraphStyle()
-            paragraph.paragraphSpacing = 6
-            var prefix = ""
-            var isCodeBlock = false
-
-            if let intent {
-                for component in intent.components {
-                    switch component.kind {
-                    case .header(let level):
-                        let size: CGFloat = [26, 22, 18, 16, 15, 14][max(0, min(5, level - 1))]
-                        font = NSFont.systemFont(ofSize: size, weight: .bold)
-                        paragraph.paragraphSpacingBefore = 10
-                    case .codeBlock:
-                        font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-                        isCodeBlock = true
-                        paragraph.headIndent = 12
-                        paragraph.firstLineHeadIndent = 12
-                    case .blockQuote:
-                        color = .secondaryLabelColor
-                        paragraph.headIndent = 16
-                        paragraph.firstLineHeadIndent = 16
-                    case .listItem(let ordinal):
-                        paragraph.headIndent = 22
-                        paragraph.firstLineHeadIndent = 4
-                        paragraph.paragraphSpacing = 3
-                        if blockID != previousBlockID {
-                            let isOrdered = intent.components.contains { if case .orderedList = $0.kind { return true } else { return false } }
-                            if isOrdered {
-                                let listID = intent.components.first { if case .orderedList = $0.kind { return true } else { return false } }?.identity ?? 0
-                                let number = ordinal > 0 ? ordinal : (orderedCounters[listID] ?? 0) + 1
-                                orderedCounters[listID] = number
-                                prefix = "\(number).  "
-                            } else {
-                                prefix = "•  "
-                            }
-                        }
-                    default:
-                        break
-                    }
-                }
-            }
-
-            if let inline = run.inlinePresentationIntent {
-                var traits: NSFontDescriptor.SymbolicTraits = []
-                if inline.contains(.stronglyEmphasized) { traits.insert(.bold) }
-                if inline.contains(.emphasized) { traits.insert(.italic) }
-                if !traits.isEmpty, let descriptor = font.fontDescriptor.withSymbolicTraits(traits) as NSFontDescriptor? {
-                    font = NSFont(descriptor: descriptor, size: font.pointSize) ?? font
-                }
-                if inline.contains(.code) {
-                    font = NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular)
-                }
-                if inline.contains(.strikethrough) { /* handled below */ }
-            }
-
-            // Block separation: the parser does not keep newlines between blocks.
-            if let previousBlockID, previousBlockID != blockID, output.length > 0 {
-                output.append(NSAttributedString(string: "\n"))
-            }
-            previousBlockID = blockID
-
-            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
-            if isCodeBlock || (run.inlinePresentationIntent?.contains(.code) ?? false) {
-                attributes[.backgroundColor] = NSColor.quaternaryLabelColor.withAlphaComponent(0.18)
-            }
-            if let link = run.link {
-                attributes[.link] = link
-                attributes[.foregroundColor] = NSColor.linkColor
-            }
-            if run.inlinePresentationIntent?.contains(.strikethrough) ?? false {
-                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-            }
-            if !prefix.isEmpty {
-                output.append(NSAttributedString(string: prefix, attributes: [.font: baseFont, .foregroundColor: color, .paragraphStyle: paragraph]))
-            }
-            output.append(NSAttributedString(string: isCodeBlock ? text.trimmingCharacters(in: .newlines) : text, attributes: attributes))
-        }
-        return output
+    /// Converts Markdown (GFM: tables, task lists, strikethrough) to a self-contained HTML page.
+    static func html(from markdown: String) -> String {
+        let body = HTMLFormatter.format(markdown)
+        return """
+        <!doctype html><html><head><meta charset="utf-8">
+        <meta name="color-scheme" content="light dark">
+        <style>
+        :root { color-scheme: light dark; }
+        body { font: 14px -apple-system, system-ui, sans-serif; line-height: 1.5; margin: 0; padding: 14px 18px;
+               color: #1d1d1f; background: #ffffff; -webkit-text-size-adjust: none; }
+        @media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #1e1f22; } }
+        h1,h2,h3,h4 { margin: 0.9em 0 0.4em; line-height: 1.25; } h1 { font-size: 1.7em; } h2 { font-size: 1.4em; } h3 { font-size: 1.15em; }
+        h1:first-child,h2:first-child,h3:first-child,p:first-child { margin-top: 0; }
+        p, ul, ol, pre, table, blockquote { margin: 0.5em 0; }
+        ul, ol { padding-left: 1.6em; } li + li { margin-top: 0.15em; }
+        code { font: 12.5px ui-monospace, Menlo, monospace; background: rgba(127,127,127,0.16); padding: 1px 5px; border-radius: 4px; }
+        pre { background: rgba(127,127,127,0.14); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 3px solid rgba(127,127,127,0.5); margin-left: 0; padding: 0.1em 0 0.1em 12px; color: rgba(127,127,127,0.95); }
+        table { border-collapse: collapse; width: auto; max-width: 100%; display: block; overflow-x: auto; }
+        th, td { border: 1px solid rgba(127,127,127,0.35); padding: 5px 10px; text-align: left; vertical-align: top; }
+        th { background: rgba(127,127,127,0.14); font-weight: 600; }
+        tr:nth-child(even) td { background: rgba(127,127,127,0.06); }
+        a { color: #0a84ff; text-decoration: none; } a:hover { text-decoration: underline; }
+        hr { border: 0; border-top: 1px solid rgba(127,127,127,0.35); margin: 1em 0; }
+        img { max-width: 100%; }
+        input[type=checkbox] { vertical-align: middle; margin-right: 6px; }
+        </style></head><body>\(body)</body></html>
+        """
     }
 
-    private static var baseFont: NSFont { .systemFont(ofSize: 14) }
 }
