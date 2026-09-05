@@ -79,6 +79,8 @@ Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enov
 
 ## Notes and limitations
 
+- `claude -p` runs with **no tools** by default (`{tools}` in the command template becomes `--tools ""`):
+  fast, and the model cannot read local files. Settings › AI › Tools can allow WebFetch/WebSearch.
 - `claude -p` needs several seconds (about 4 s with `--model haiku --setting-sources ""`, about 10 s with defaults). The HUD shows an elapsed-seconds counter while it runs.
 - Do not add `--bare` to the `claude -p` command: it skips OAuth login and fails with “Not logged in”.
 - **Apple Intelligence (Foundation Models) does not support Polish** text. Prompts default to the

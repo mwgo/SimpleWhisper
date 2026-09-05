@@ -380,7 +380,7 @@ struct PromptEditor: View {
                         .labelsHidden()
                         .font(.system(.body, design: .monospaced))
                         .lineLimit(1...3)
-                    Text("Text is written to stdin. {prompt} (or $SW_PROMPT) receives the instructions. stdout becomes the result.")
+                    Text("Text is written to stdin. {prompt} (or $SW_PROMPT) receives the instructions, {tools} the tool flags (Settings › AI › Tools). stdout becomes the result.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -601,11 +601,17 @@ struct AISettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Shell command (default for new prompts)") {
-                TextField("Command", text: Binding(get: { settings.defaultShellCommand }, set: { settings.defaultShellCommand = $0 }))
+                TextField("Command", text: Binding(get: { settings.defaultShellCommand }, set: { settings.defaultShellCommand = $0 }), axis: .vertical)
                     .font(.system(.body, design: .monospaced))
-                Text("Runs in /bin/zsh -lc. The dictated text is piped to stdin, {prompt} is replaced with the prompt instructions (quoted), stdout is used as the result. Example: claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}")
+                    .lineLimit(1...3)
+                Text("Runs in /bin/zsh -lc. The dictated text is piped to stdin, {prompt} is replaced with the prompt instructions (quoted), {tools} with the tool flags from the Tools section, stdout is used as the result.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Reset to default") { settings.defaultShellCommand = NamedPrompt.defaultShellCommand }
+            }
+            Section("Tools") {
+                Toggle("Allow Claude to use the web (WebFetch, WebSearch)", isOn: Binding(get: { settings.allowWebAccess }, set: { settings.allowWebAccess = $0 }))
+                Text("In print mode Claude cannot ask for permissions, so tools are off by default ({tools} → --tools \"\"): faster, and the model cannot read local files. When on, {tools} becomes --tools WebFetch WebSearch --allowedTools WebFetch WebSearch, so prompts and commands may look things up online (slower).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Result window") {
                 Toggle("Ask for Markdown when the result cannot be pasted", isOn: Binding(get: { settings.markdownWhenNotPasting }, set: { settings.markdownWhenNotPasting = $0 }))

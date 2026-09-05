@@ -4,10 +4,16 @@ import Foundation
 /// environment variable (no quoting issues); the text is written to stdin; stdout is the result.
 final class ShellCommandProcessor: TextProcessor {
     let commandTemplate: String
+    /// Replaces `{tools}` in the template. Off: no tools at all. On: web tools only.
+    let allowWebAccess: Bool
+
+    static let noToolsFlags = "--tools \"\""
+    static let webToolsFlags = "--tools WebFetch WebSearch --allowedTools WebFetch WebSearch"
     let timeout: TimeInterval
 
-    init(commandTemplate: String, timeout: TimeInterval = 120) {
+    init(commandTemplate: String, allowWebAccess: Bool = false, timeout: TimeInterval = 120) {
         self.commandTemplate = commandTemplate
+        self.allowWebAccess = allowWebAccess
         self.timeout = timeout
     }
 
@@ -45,7 +51,9 @@ final class ShellCommandProcessor: TextProcessor {
     }
 
     func process(text: String, instructions: String) async throws -> String {
-        let command = commandTemplate.replacingOccurrences(of: "{prompt}", with: "\"$SW_PROMPT\"")
+        let command = commandTemplate
+            .replacingOccurrences(of: "{prompt}", with: "\"$SW_PROMPT\"")
+            .replacingOccurrences(of: "{tools}", with: allowWebAccess ? Self.webToolsFlags : Self.noToolsFlags)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-lc", command]

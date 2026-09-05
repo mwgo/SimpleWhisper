@@ -137,7 +137,7 @@ enum DebugCLI {
             if let selection = value("--selection") {
                 let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary).trimmingCharacters(in: .whitespacesAndNewlines)
                 let settings = AppSettings()
-                let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
+                let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand, allowWebAccess: settings.allowWebAccess)
                 let aiStarted = Date()
                 let result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
                 print("Command \"\(instruction)\" in \(String(format: "%.1f", Date().timeIntervalSince(aiStarted))) s")
@@ -157,7 +157,7 @@ enum DebugCLI {
                 }
                 let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: !expansion.usedMacroIDs.isEmpty)
                 let processor: TextProcessor = prompt.provider == .shell
-                    ? ShellCommandProcessor(commandTemplate: prompt.shellCommand)
+                    ? ShellCommandProcessor(commandTemplate: prompt.shellCommand, allowWebAccess: AppSettings().allowWebAccess)
                     : FoundationModelsProcessor()
                 let aiStarted = Date()
                 text = try await processor.process(text: text, instructions: instructions)

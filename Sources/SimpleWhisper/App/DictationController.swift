@@ -261,7 +261,7 @@ final class DictationController: HotkeyMonitorDelegate {
                 }
             }
             defer { ticker.cancel() }
-            let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
+            let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand, allowWebAccess: settings.allowWebAccess)
             let result: String
             do {
                 result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary, wantMarkdown: wantsMarkdown))
@@ -447,7 +447,7 @@ final class DictationController: HotkeyMonitorDelegate {
             return FoundationModelsProcessor()
         case .shell:
             let template = prompt.shellCommand.trimmingCharacters(in: .whitespaces)
-            return ShellCommandProcessor(commandTemplate: template.isEmpty ? settings.defaultShellCommand : template)
+            return ShellCommandProcessor(commandTemplate: template.isEmpty ? settings.defaultShellCommand : template, allowWebAccess: settings.allowWebAccess)
         }
     }
 

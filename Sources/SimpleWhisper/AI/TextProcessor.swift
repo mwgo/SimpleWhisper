@@ -39,12 +39,13 @@ struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
     var name: String
     var instructions: String
     var provider: PromptProvider = .shell
-    /// Shell template. `{prompt}` (or `$SW_PROMPT`) receives the instructions; the text arrives on stdin.
+    /// Shell template. `{prompt}` (or `$SW_PROMPT`) receives the instructions, `{tools}` the tool flags
+    /// (none, or web tools when allowed in Settings › AI); the text arrives on stdin.
     var shellCommand: String = NamedPrompt.defaultShellCommand
 
-    static let defaultShellCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}"
+    static let defaultShellCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
     /// Command mode edits real text, so it defaults to a stronger (slower) model.
-    static let defaultCommandShellCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}"
+    static let defaultCommandShellCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
 
     init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .shell, shellCommand: String = NamedPrompt.defaultShellCommand) {
         self.id = id

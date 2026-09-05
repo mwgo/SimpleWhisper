@@ -46,6 +46,10 @@ final class AppSettings {
     var defaultShellCommand: String {
         didSet { defaults.set(defaultShellCommand, forKey: "defaultShellCommand") }
     }
+    /// Lets `claude -p` use WebFetch/WebSearch (replaces `{tools}` in command templates).
+    var allowWebAccess: Bool {
+        didSet { defaults.set(allowWebAccess, forKey: "allowWebAccess") }
+    }
     /// When no text field is focused at recording start, ask the AI for Markdown output (shown rendered).
     var markdownWhenNotPasting: Bool {
         didSet { defaults.set(markdownWhenNotPasting, forKey: "markdownWhenNotPasting") }
@@ -88,10 +92,23 @@ final class AppSettings {
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
-        defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
-        commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand
+        // Templates created before the {tools} placeholder existed get it added.
+        defaultShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand)
+        commandShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand)
         markdownWhenNotPasting = defaults.object(forKey: "markdownWhenNotPasting") as? Bool ?? true
+        allowWebAccess = defaults.object(forKey: "allowWebAccess") as? Bool ?? false
         selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
+    }
+}
+
+extension AppSettings {
+    /// Adds `{tools}` to `claude -p` templates created before the placeholder existed.
+    static func withToolsPlaceholder(_ command: String) -> String {
+        guard command.hasPrefix("claude "), !command.contains("{tools}"), !command.contains("--tools") else { return command }
+        if let range = command.range(of: "--system-prompt") {
+            return command.replacingCharacters(in: range, with: "{tools} --system-prompt")
+        }
+        return command + " {tools}"
     }
 }
 
@@ -122,6 +139,23 @@ final class DataStore {
         macros = Self.load("macros.json") ?? VoiceMacro.defaults
         history = Self.load("history.json") ?? []
         seedPunctuationMacrosIfNeeded()
+        migratePromptTools()
+    }
+
+    private func migratePromptTools() {
+        let key = "toolsPlaceholderSeeded"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        var changed = false
+        var updated = prompts
+        for index in updated.indices {
+            let migrated = AppSettings.withToolsPlaceholder(updated[index].shellCommand)
+            if migrated != updated[index].shellCommand {
+                updated[index].shellCommand = migrated
+                changed = true
+            }
+        }
+        if changed { prompts = updated }
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     func addHistory(_ entry: HistoryEntry) {
