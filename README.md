@@ -7,7 +7,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
 
 ## Features
 
-- **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels.
+- **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels, **Control** runs the recording as a command.
 - **Launch at login** toggle (Settings › General › Startup) via the system Login Items mechanism.
 - **Menu bar only** (no Dock icon). A small green HUD appears next to the text caret (or top/bottom of
   the screen, or hidden; Settings › General › HUD) while recording/transcribing; click it to pick a
@@ -27,7 +27,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   doubled. One switch (Settings › Macros or the menu bar) turns it off when those words are meant literally.
 - **Command mode** (Settings › General): select text in the editor, start dictation, say what to do with
   it (“convert to markdown”, “translate to English”, “make it shorter”) and click the round ▶ button in the
-  HUD. The selection is read (Accessibility, or ⌘C), sent to the AI command with your instruction, and the
+  HUD or press Control (while still holding fn, or after a short fn press). The selection is read (Accessibility, or ⌘C), sent to the AI command with your instruction, and the
   result replaces the selection.
 - **History** (opt-in, Settings › General): “History…” in the menu bar opens a floating window with the last 10
   dictations and commands (date + wrapped text). Clicking a card copies it to the clipboard; ▶ pastes it into the active editor.

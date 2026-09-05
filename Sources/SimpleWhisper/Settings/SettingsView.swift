@@ -71,7 +71,7 @@ struct GeneralSettingsView: View {
                 }
             }
             Section("Hotkey") {
-                Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels.")
+                Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels. Control while recording runs the dictation as a command (if command mode is on).")
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.startHotkey() }), in: 200...1000, step: 50)
                 Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -81,7 +81,7 @@ struct GeneralSettingsView: View {
                     ForEach(HUDPlacement.allCases) { placement in Text(placement.title).tag(placement) }
                 }
                 Toggle("Show status text (otherwise only the animation)", isOn: Binding(get: { settings.hudShowsText }, set: { settings.hudShowsText = $0 }))
-                Text("The small green status capsule shown while recording and processing. “Near the text caret” falls back to the focused field, then to the bottom of the screen. With “Do not show” the menu bar icon is the only indicator (the ▶ command button is then unavailable; use the menu).")
+                Text("The small green status capsule shown while recording and processing. “Near the text caret” falls back to the focused field, then to the bottom of the screen. With “Do not show” the menu bar icon is the only indicator; the ▶ command button is then unavailable, so run commands with the Control key or from the menu.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Output") {
@@ -94,7 +94,7 @@ struct GeneralSettingsView: View {
             }
             Section("Command mode") {
                 Toggle("Enable command mode (▶ button in the HUD)", isOn: Binding(get: { settings.commandModeEnabled }, set: { settings.commandModeEnabled = $0 }))
-                Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD. The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection. With nothing selected, the command applies to the text you just dictated, which is re-selected and replaced.")
+                Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD or press Control (works while holding fn or after a short fn press). The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection. With nothing selected, the command applies to the text you just dictated, which is re-selected and replaced.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Startup") {

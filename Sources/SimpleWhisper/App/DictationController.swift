@@ -159,6 +159,12 @@ final class DictationController: HotkeyMonitorDelegate {
         cancel()
     }
 
+    func hotkeyRunCommand() -> Bool {
+        guard state.phase == .recording, settings.commandModeEnabled else { return false }
+        stopAndRunCommand()
+        return true
+    }
+
     // MARK: Dictation
 
     func toggleDictation() { hotkeyToggle() }

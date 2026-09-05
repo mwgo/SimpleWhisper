@@ -10,6 +10,8 @@ protocol HotkeyMonitorDelegate: AnyObject {
     func hotkeyPushToTalkStart()
     func hotkeyPushToTalkStop()
     func hotkeyCancel()
+    /// Control pressed while recording: finish and run the dictation as a command. Returns true if handled.
+    func hotkeyRunCommand() -> Bool
 }
 
 enum HotkeyError: LocalizedError {
@@ -24,6 +26,7 @@ enum HotkeyError: LocalizedError {
 final class HotkeyMonitor {
     private static let fnKeyCode: Int64 = 63
     private static let escapeKeyCode: Int64 = 53
+    private static let controlKeyCodes: Set<Int64> = [59, 62]
 
     weak var delegate: HotkeyMonitorDelegate?
     var holdThreshold: TimeInterval = 0.4
@@ -81,6 +84,15 @@ final class HotkeyMonitor {
                 fnPressed()
             } else {
                 fnReleased()
+            }
+        case .flagsChanged where Self.controlKeyCodes.contains(keyCode) && event.flags.contains(.maskControl):
+            var handled = false
+            MainActor.assumeIsolated { handled = delegate?.hotkeyRunCommand() ?? false }
+            if handled {
+                // Works both while fn is held (push-to-talk) and after a short fn press (toggle).
+                comboUsed = true
+                pushToTalkActive = false
+                cancelHold()
             }
         case .keyDown:
             if keyCode == Self.escapeKeyCode {
