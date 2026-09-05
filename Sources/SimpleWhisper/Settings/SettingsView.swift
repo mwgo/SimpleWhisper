@@ -80,6 +80,7 @@ struct GeneralSettingsView: View {
                 Picker("Position", selection: Binding(get: { settings.hudPlacement }, set: { settings.hudPlacement = $0 })) {
                     ForEach(HUDPlacement.allCases) { placement in Text(placement.title).tag(placement) }
                 }
+                Toggle("Show status text (otherwise only the animation)", isOn: Binding(get: { settings.hudShowsText }, set: { settings.hudShowsText = $0 }))
                 Text("The small green status capsule shown while recording and processing. “Near the text caret” falls back to the focused field, then to the bottom of the screen. With “Do not show” the menu bar icon is the only indicator (the ▶ command button is then unavailable; use the menu).")
                     .font(.caption).foregroundStyle(.secondary)
             }

@@ -50,6 +50,7 @@ enum HUDDemo {
         app.setActivationPolicy(.accessory)
         let controller = HUDWindowController()
         controller.placement = ProcessInfo.processInfo.environment["SW_HUD_PLACEMENT"].flatMap(HUDPlacement.init(rawValue:)) ?? .nearCaret
+        controller.showsText = ProcessInfo.processInfo.environment["SW_HUD_NOTEXT"] == nil
         hud = controller
         let stages: [(String, String?, HUDStage)] = [
             ("Recording", "Clean up", .recording),

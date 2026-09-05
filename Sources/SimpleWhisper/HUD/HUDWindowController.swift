@@ -16,6 +16,11 @@ final class HUDWindowController: NSObject {
     private var anchor: CaretLocator.Anchor?
     /// Set by the controller from settings before each show.
     var placement: HUDPlacement = .nearCaret
+    /// Mirrors the "show status text" setting.
+    var showsText: Bool {
+        get { model.showsText }
+        set { model.showsText = newValue }
+    }
 
     override init() {
         panel = NSPanel(

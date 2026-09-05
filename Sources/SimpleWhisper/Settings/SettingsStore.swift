@@ -25,6 +25,10 @@ final class AppSettings {
     var hudPlacement: HUDPlacement {
         didSet { defaults.set(hudPlacement.rawValue, forKey: "hudPlacement") }
     }
+    /// Show the status text ("Recording", "Processing · …") next to the animation.
+    var hudShowsText: Bool {
+        didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
+    }
     /// Keeps the last dictations/commands in the History submenu.
     var historyEnabled: Bool {
         didSet { defaults.set(historyEnabled, forKey: "historyEnabled") }
@@ -74,6 +78,7 @@ final class AppSettings {
         commandModeEnabled = defaults.object(forKey: "commandModeEnabled") as? Bool ?? false
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
+        hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand

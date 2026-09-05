@@ -19,6 +19,8 @@ final class HUDModel {
     var stage: HUDStage = .message
     /// Shows the round "run as command" button (recording only).
     var showsCommandButton = false
+    /// When false only the animation (and the command button) is shown, no status text.
+    var showsText = true
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
 
@@ -46,18 +48,20 @@ struct HUDView: View {
         HStack(spacing: 10) {
             indicator
                 .frame(width: 34, height: 18)
-            Text(model.text)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .lineLimit(1)
-            if let detail = model.detail, !detail.isEmpty {
-                Text("· \(detail)")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .opacity(0.8)
+            if model.showsText || model.stage == .message {
+                Text(model.text)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .lineLimit(1)
+                if let detail = model.detail, !detail.isEmpty {
+                    Text("· \(detail)")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .opacity(0.8)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .opacity(0.7)
             }
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .bold))
-                .opacity(0.7)
             if model.showsCommandButton && model.stage == .recording {
                 Button(action: onCommand) {
                     ZStack {
