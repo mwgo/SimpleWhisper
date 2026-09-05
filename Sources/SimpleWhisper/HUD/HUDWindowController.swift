@@ -8,6 +8,7 @@ final class HUDWindowController: NSObject {
     var promptsProvider: () -> [NamedPrompt] = { [] }
     var selectedPromptID: () -> UUID? = { nil }
     var onSelectPrompt: (UUID?) -> Void = { _ in }
+    var onRunCommand: () -> Void = {}
 
     private let panel: NSPanel
     private let hostingView: NSHostingView<HUDView>
@@ -31,13 +32,18 @@ final class HUDWindowController: NSObject {
         panel.isReleasedWhenClosed = false
         hostingView = NSHostingView(rootView: HUDView(model: model, onTap: {}))
         super.init()
-        hostingView.rootView = HUDView(model: model, onTap: { [weak self] in self?.showPromptMenu() })
+        hostingView.rootView = HUDView(
+            model: model,
+            onTap: { [weak self] in self?.showPromptMenu() },
+            onCommand: { [weak self] in self?.onRunCommand() }
+        )
         panel.contentView = hostingView
     }
 
-    func show(text: String, detail: String? = nil, stage: HUDStage) {
+    func show(text: String, detail: String? = nil, stage: HUDStage, commandButton: Bool = false) {
         hideTask?.cancel()
         anchor = CaretLocator.anchor()
+        model.showsCommandButton = commandButton
         model.resetLevels()
         update(text: text, detail: detail, stage: stage)
         panel.orderFrontRegardless()

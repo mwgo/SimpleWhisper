@@ -18,6 +18,10 @@ final class AppSettings {
     var keepTextInClipboard: Bool {
         didSet { defaults.set(keepTextInClipboard, forKey: "keepTextInClipboard") }
     }
+    /// Shows the round "run as command" button in the HUD (apply the dictated instruction to selected text).
+    var commandModeEnabled: Bool {
+        didSet { defaults.set(commandModeEnabled, forKey: "commandModeEnabled") }
+    }
     /// When off, punctuation macros ("przecinek", "comma", …) are left as ordinary words.
     var spokenPunctuationEnabled: Bool {
         didSet { defaults.set(spokenPunctuationEnabled, forKey: "spokenPunctuationEnabled") }
@@ -27,6 +31,10 @@ final class AppSettings {
     }
     var defaultShellCommand: String {
         didSet { defaults.set(defaultShellCommand, forKey: "defaultShellCommand") }
+    }
+    /// Shell command used by command mode (instruction applied to selected text).
+    var commandShellCommand: String {
+        didSet { defaults.set(commandShellCommand, forKey: "commandShellCommand") }
     }
     /// Languages offered for automatic detection (ISO 639-1 codes), edited in Settings.
     var selectedLanguages: [String] {
@@ -56,8 +64,10 @@ final class AppSettings {
         selectedPromptID = defaults.string(forKey: "selectedPromptID").flatMap(UUID.init(uuidString:))
         keepTextInClipboard = defaults.object(forKey: "keepTextInClipboard") as? Bool ?? false
         spokenPunctuationEnabled = defaults.object(forKey: "spokenPunctuationEnabled") as? Bool ?? true
+        commandModeEnabled = defaults.object(forKey: "commandModeEnabled") as? Bool ?? false
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
+        commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand
         selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
     }
 }

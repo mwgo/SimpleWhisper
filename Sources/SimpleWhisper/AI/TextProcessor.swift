@@ -43,6 +43,8 @@ struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
     var shellCommand: String = NamedPrompt.defaultShellCommand
 
     static let defaultShellCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}"
+    /// Command mode edits real text, so it defaults to a stronger (slower) model.
+    static let defaultCommandShellCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}"
 
     init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .shell, shellCommand: String = NamedPrompt.defaultShellCommand) {
         self.id = id
@@ -74,6 +76,28 @@ enum PromptComposer {
             lines.append("- Keep every ⟦MACRO:…⟧ placeholder verbatim and in place; it will be replaced later.")
         }
         lines.append("- Output only the resulting text. No preamble, no explanations, no quotes around it.")
+        return lines.joined(separator: "\n")
+    }
+}
+
+
+/// Builds the system instructions for command mode: apply a spoken instruction to selected text.
+enum CommandComposer {
+    static func instructions(spoken: String, vocabulary: [VocabularyTerm]) -> String {
+        var lines: [String] = [
+            "You are a text-editing tool. The user selected a piece of text in an editor and dictated an instruction.",
+            "Apply the instruction to the text you receive on input and return ONLY the resulting text.",
+            "",
+            "Instruction (dictated, may be Polish or English, may contain speech-recognition errors): \(spoken)",
+            "",
+            "Rules:",
+            "- Output only the transformed text, nothing else: no preamble, no explanation, no code fences unless the instruction asks for them.",
+            "- Keep the language of the text unless the instruction says to translate.",
+            "- Preserve code, identifiers, URLs and formatting that the instruction does not ask to change.",
+        ]
+        if !vocabulary.isEmpty {
+            lines.append("- Preserve these terms exactly: \(vocabulary.map(\.text).joined(separator: ", ")).")
+        }
         return lines.joined(separator: "\n")
     }
 }

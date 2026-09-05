@@ -53,7 +53,8 @@ enum HUDDemo {
             ("Cancelled", nil, .message),
         ]
         var index = 0
-        controller.show(text: stages[0].0, detail: stages[0].1, stage: stages[0].2)
+        controller.show(text: stages[0].0, detail: stages[0].1, stage: stages[0].2, commandButton: true)
+        print("hud: \(controller.anchorDebug ?? "-")")
         var tick = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
             tick += 1
@@ -74,6 +75,7 @@ enum DebugCLI {
     static let usage = """
     Usage: SimpleWhisper --transcribe <audio file> [--engine <kind>] [--language <mode>]
                          [--prompt <name>] [--clipboard <text>] [--no-vocabulary] [--no-punctuation]
+                         [--selection <text>]   (command mode: audio = instruction applied to <text>)
 
       --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech
       --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
@@ -120,6 +122,17 @@ enum DebugCLI {
             print("Transcribed in \(String(format: "%.1f", Date().timeIntervalSince(loaded))) s, language: \(transcription.detectedLanguage ?? "?")")
             if let info = transcription.debugInfo { print("  [lang] \(info)") }
             print("Raw:       \(transcription.text)")
+
+            if let selection = value("--selection") {
+                let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary).trimmingCharacters(in: .whitespacesAndNewlines)
+                let settings = AppSettings()
+                let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
+                let aiStarted = Date()
+                let result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
+                print("Command \"\(instruction)\" in \(String(format: "%.1f", Date().timeIntervalSince(aiStarted))) s")
+                print("Result:\n\(result)")
+                return 0
+            }
 
             var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
             let expansion = MacroExpander.stage1(text, macros: macros, clipboard: clipboard)

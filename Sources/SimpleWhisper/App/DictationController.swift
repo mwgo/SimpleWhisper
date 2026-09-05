@@ -4,11 +4,13 @@ import AppKit
 enum DictationError: LocalizedError {
     case tooShort
     case noSpeech
+    case noSelection
 
     var errorDescription: String? {
         switch self {
         case .tooShort: return "Recording too short."
         case .noSpeech: return "No speech recognized."
+        case .noSelection: return "No text selected in the editor."
         }
     }
 }
@@ -38,6 +40,7 @@ final class DictationController: HotkeyMonitorDelegate {
         }
         hud.promptsProvider = { [weak self] in self?.store.prompts ?? [] }
         hud.selectedPromptID = { [weak self] in self?.settings.selectedPromptID }
+        hud.onRunCommand = { [weak self] in self?.stopAndRunCommand() }
         hud.onSelectPrompt = { [weak self] id in
             guard let self else { return }
             self.settings.selectedPromptID = id
@@ -168,7 +171,7 @@ final class DictationController: HotkeyMonitorDelegate {
         }
         state.phase = .recording
         beginActivity()
-        hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording)
+        hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording, commandButton: settings.commandModeEnabled)
         state.hudAnchor = hud.anchorDescription
         DebugLog.write("HUD \(hud.anchorDebug ?? "-")")
         if engines[settings.engineKind]?.isReady != true {
@@ -183,6 +186,71 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.update(text: "Transcribing…", stage: .transcribing)
         pipelineTask = Task { [weak self] in
             await self?.runPipeline(samples: samples)
+        }
+    }
+
+    /// Command mode: the recording is an instruction to apply (via AI) to the text selected in the editor.
+    func stopAndRunCommand() {
+        guard state.phase == .recording, settings.commandModeEnabled else { return }
+        let samples = recorder.stop()
+        state.phase = .transcribing
+        hud.update(text: "Reading selection…", stage: .transcribing)
+        pipelineTask = Task { [weak self] in
+            await self?.runCommandPipeline(samples: samples)
+        }
+    }
+
+    private func runCommandPipeline(samples: [Float]) async {
+        do {
+            guard samples.count >= Int(AudioRecorder.targetFormat.sampleRate) / 3 else { throw DictationError.tooShort }
+            let selection = await SelectionReader.selectedText(in: paster.targetApplication)
+            try Task.checkCancellation()
+            guard let selection, !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw DictationError.noSelection
+            }
+            hud.update(text: "Transcribing command…", stage: .transcribing)
+            let engine = try await ensureEngine(settings.engineKind)
+            try Task.checkCancellation()
+            let vocabulary = store.effectiveVocabulary(spokenPunctuation: false)
+            let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
+            try Task.checkCancellation()
+            let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !instruction.isEmpty else { throw DictationError.noSpeech }
+            DebugLog.write("Command: \"\(instruction)\" on \(selection.count) chars")
+
+            let preview = instruction.count > 40 ? String(instruction.prefix(40)) + "…" : instruction
+            state.phase = .processing("Command")
+            hud.update(text: "Command", detail: preview, stage: .processing)
+            let ticker = Task { [weak self] in
+                var seconds = 0
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    seconds += 1
+                    self?.hud.update(text: "Command", detail: "\(preview) · \(seconds)s", stage: .processing)
+                }
+            }
+            defer { ticker.cancel() }
+            let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
+            let result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
+            try Task.checkCancellation()
+
+            state.lastText = result
+            state.lastLanguage = transcription.detectedLanguage
+            state.phase = .idle
+            hud.hide()
+            await paster.paste(result, keepInClipboard: settings.keepTextInClipboard)
+            endActivity()
+        } catch is CancellationError {
+            if state.phase != .idle {
+                state.phase = .idle
+                endActivity()
+                hud.hide()
+            }
+        } catch {
+            DebugLog.write("Command error: \(error)")
+            showError(error.localizedDescription)
         }
     }
 

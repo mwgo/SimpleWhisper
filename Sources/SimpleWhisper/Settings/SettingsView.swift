@@ -79,6 +79,11 @@ struct GeneralSettingsView: View {
             Section("Output") {
                 Toggle("Keep dictated text in the clipboard after pasting", isOn: Binding(get: { settings.keepTextInClipboard }, set: { settings.keepTextInClipboard = $0 }))
             }
+            Section("Command mode") {
+                Toggle("Enable command mode (▶ button in the HUD)", isOn: Binding(get: { settings.commandModeEnabled }, set: { settings.commandModeEnabled = $0 }))
+                Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD. The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Startup") {
                 Toggle("Launch SimpleWhisper at login", isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.setEnabled($0) }))
                 HStack {
@@ -553,6 +558,14 @@ struct AISettingsView: View {
                 Text("Runs in /bin/zsh -lc. The dictated text is piped to stdin, {prompt} is replaced with the prompt instructions (quoted), stdout is used as the result. Example: claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands --system-prompt {prompt}")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Reset to default") { settings.defaultShellCommand = NamedPrompt.defaultShellCommand }
+            }
+            Section("Command mode command") {
+                TextField("Command", text: Binding(get: { settings.commandShellCommand }, set: { settings.commandShellCommand = $0 }), axis: .vertical)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1...3)
+                Text("Used when you press ▶ in the HUD to apply a dictated instruction to selected text. Editing real text deserves a stronger model, so the default uses --model opus (slower than haiku).")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Reset to default") { settings.commandShellCommand = NamedPrompt.defaultCommandShellCommand }
             }
         }
         .formStyle(.grouped)

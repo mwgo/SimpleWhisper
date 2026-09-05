@@ -7,6 +7,9 @@ import CoreGraphics
 final class TextPaster {
     private var targetApp: NSRunningApplication?
 
+    /// The application that was frontmost when dictation started.
+    var targetApplication: NSRunningApplication? { targetApp }
+
     func rememberTarget() {
         let front = NSWorkspace.shared.frontmostApplication
         targetApp = front == NSRunningApplication.current ? targetApp : front

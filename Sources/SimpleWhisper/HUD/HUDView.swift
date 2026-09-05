@@ -17,6 +17,8 @@ final class HUDModel {
     var text: String = ""
     var detail: String? = nil
     var stage: HUDStage = .message
+    /// Shows the round "run as command" button (recording only).
+    var showsCommandButton = false
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
 
@@ -35,6 +37,7 @@ final class HUDModel {
 struct HUDView: View {
     var model: HUDModel
     var onTap: () -> Void
+    var onCommand: () -> Void = {}
 
     static let freshGreen = Color(red: 0.24, green: 0.86, blue: 0.52)
     static let ink = Color(red: 0.03, green: 0.18, blue: 0.10)
@@ -55,6 +58,21 @@ struct HUDView: View {
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
                 .opacity(0.7)
+            if model.showsCommandButton && model.stage == .recording {
+                Button(action: onCommand) {
+                    ZStack {
+                        Circle().fill(Self.ink)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Self.freshGreen)
+                            .offset(x: 0.5)
+                    }
+                    .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help("Run as command on the selected text")
+                .padding(.leading, 2)
+            }
         }
         .foregroundStyle(Self.ink)
         .padding(.horizontal, 14)

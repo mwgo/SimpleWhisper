@@ -24,6 +24,10 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   “nawias otwarty/zamknięty”, “nowy akapit”/“new paragraph”. Marks are placed with proper spacing,
   the next sentence is capitalised, and punctuation the model already inserted is merged rather than
   doubled. One switch (Settings › Macros or the menu bar) turns it off when those words are meant literally.
+- **Command mode** (Settings › General): select text in the editor, start dictation, say what to do with
+  it (“convert to markdown”, “translate to English”, “make it shorter”) and click the round ▶ button in the
+  HUD. The selection is read (Accessibility, or ⌘C), sent to the AI command with your instruction, and the
+  result replaces the selection.
 - **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
   Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
 

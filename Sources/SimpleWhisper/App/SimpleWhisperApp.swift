@@ -78,6 +78,9 @@ struct MenuContent: View {
             Button("Start dictation") { controller.startRecording() }
         case .recording:
             Button("Stop and transcribe") { controller.stopAndTranscribe() }
+            if settings.commandModeEnabled {
+                Button("Run as command on selection") { controller.stopAndRunCommand() }
+            }
             Button("Cancel dictation") { controller.cancel() }
         default:
             Button("Cancel dictation") { controller.cancel() }
