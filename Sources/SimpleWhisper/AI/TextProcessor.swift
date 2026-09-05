@@ -63,7 +63,7 @@ struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
 }
 
 enum PromptComposer {
-    static func instructions(for prompt: NamedPrompt, vocabulary: [VocabularyTerm], hasMacros: Bool) -> String {
+    static func instructions(for prompt: NamedPrompt, vocabulary: [VocabularyTerm], hasMacros: Bool, wantMarkdown: Bool = false) -> String {
         var lines: [String] = [prompt.instructions.trimmingCharacters(in: .whitespacesAndNewlines)]
         lines.append("")
         lines.append("Rules:")
@@ -75,6 +75,9 @@ enum PromptComposer {
         if hasMacros {
             lines.append("- Keep every ⟦MACRO:…⟧ placeholder verbatim and in place; it will be replaced later.")
         }
+        if wantMarkdown {
+            lines.append("- Format the result as well-structured Markdown (headings, lists, emphasis, code blocks where appropriate). It will be displayed rendered.")
+        }
         lines.append("- Output only the resulting text. No preamble, no explanations, no quotes around it.")
         return lines.joined(separator: "\n")
     }
@@ -83,7 +86,7 @@ enum PromptComposer {
 
 /// Builds the system instructions for command mode: apply a spoken instruction to selected text.
 enum CommandComposer {
-    static func instructions(spoken: String, vocabulary: [VocabularyTerm]) -> String {
+    static func instructions(spoken: String, vocabulary: [VocabularyTerm], wantMarkdown: Bool = false) -> String {
         var lines: [String] = [
             "You are a text-editing tool. The user selected a piece of text in an editor and dictated an instruction.",
             "Apply the instruction to the text you receive on input and return ONLY the resulting text.",
@@ -97,6 +100,9 @@ enum CommandComposer {
         ]
         if !vocabulary.isEmpty {
             lines.append("- Preserve these terms exactly: \(vocabulary.map(\.text).joined(separator: ", ")).")
+        }
+        if wantMarkdown {
+            lines.append("- Format the result as well-structured Markdown; it will be displayed rendered, not pasted into an editor.")
         }
         return lines.joined(separator: "\n")
     }

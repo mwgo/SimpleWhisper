@@ -36,6 +36,8 @@ final class DictationController: HotkeyMonitorDelegate {
         onPaste: { [weak self] entry in self?.pasteHistoryEntry(entry) }
     )
     private var capturedClipboard: String?
+    /// Whether a text field had focus when recording started (decides paste vs. result window).
+    private var pasteTargetAvailable = true
     /// Keeps the process out of App Nap while a dictation is in flight (otherwise the paste
     /// after a long AI step waits until the user clicks something).
     private var activityToken: NSObjectProtocol?
@@ -175,6 +177,7 @@ final class DictationController: HotkeyMonitorDelegate {
         state.lastError = nil
         capturedClipboard = NSPasteboard.general.string(forType: .string)
         paster.rememberTarget()
+        pasteTargetAvailable = PasteTargetProbe.canPasteIntoFocusedElement()
         do {
             try recorder.start()
         } catch {
@@ -261,7 +264,7 @@ final class DictationController: HotkeyMonitorDelegate {
             let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand)
             let result: String
             do {
-                result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
+                result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary, wantMarkdown: wantsMarkdown))
             }
             ticker.cancel()   // otherwise a late tick would re-show the HUD after hide()
             try Task.checkCancellation()
@@ -292,16 +295,16 @@ final class DictationController: HotkeyMonitorDelegate {
         }
     }
 
-    /// Pastes into the active text field, or, when nothing can accept a paste, leaves the text in the
-    /// clipboard and shows it in an editable window.
+    /// AI output should be Markdown when it will be shown in the result window instead of pasted.
+    private var wantsMarkdown: Bool { !pasteTargetAvailable && settings.markdownWhenNotPasting }
+
+    /// Pastes into the active text field, or, when nothing can accept a paste, shows the text in a window
+    /// (rendered as Markdown when it looks like Markdown). The clipboard is left alone.
     private func deliver(_ text: String) async {
         if PasteTargetProbe.canPasteIntoFocusedElement() {
             await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
         } else {
             DebugLog.write("No editable field focused; showing result window")
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
             hud.hide()
             resultWindow.show(text: text)
         }
@@ -385,7 +388,7 @@ final class DictationController: HotkeyMonitorDelegate {
             if let prompt = selectedPrompt {
                 state.phase = .processing(prompt.name)
                 hud.update(text: "Processing", detail: [languageLabel, prompt.name].compactMap { $0 }.joined(separator: " · "), stage: .processing)
-                let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: !expansion.usedMacroIDs.isEmpty)
+                let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: !expansion.usedMacroIDs.isEmpty, wantMarkdown: wantsMarkdown)
                 let detailBase = [languageLabel, prompt.name].compactMap { $0 }.joined(separator: " · ")
                 let ticker = Task { [weak self] in
                     var seconds = 0

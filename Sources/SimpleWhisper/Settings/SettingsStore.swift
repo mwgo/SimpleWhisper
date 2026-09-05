@@ -46,6 +46,10 @@ final class AppSettings {
     var defaultShellCommand: String {
         didSet { defaults.set(defaultShellCommand, forKey: "defaultShellCommand") }
     }
+    /// When no text field is focused at recording start, ask the AI for Markdown output (shown rendered).
+    var markdownWhenNotPasting: Bool {
+        didSet { defaults.set(markdownWhenNotPasting, forKey: "markdownWhenNotPasting") }
+    }
     /// Shell command used by command mode (instruction applied to selected text).
     var commandShellCommand: String {
         didSet { defaults.set(commandShellCommand, forKey: "commandShellCommand") }
@@ -86,6 +90,7 @@ final class AppSettings {
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
         commandShellCommand = defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand
+        markdownWhenNotPasting = defaults.object(forKey: "markdownWhenNotPasting") as? Bool ?? true
         selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
     }
 }

@@ -254,7 +254,25 @@ enum ResultDemo {
         app.setActivationPolicy(.regular)
         let controller = ResultWindowController()
         self.controller = controller
-        controller.show(text: "Dzisiaj testuję enova i Sonetę. Dodaj metodę GetValue do klasy PaymentService, a potem uruchom testy jednostkowe.")
+        let sample = ProcessInfo.processInfo.environment["SW_RESULT_TEXT"] ?? """
+        # Plan na dziś
+
+        Dodaj metodę **GetValue** do klasy `PaymentService`, a potem:
+
+        1. uruchom testy jednostkowe,
+        2. sprawdź *pokrycie*,
+        3. otwórz [PR](https://github.com/mwgo/SimpleWhisper).
+
+        - enova
+        - Soneta
+
+        ```swift
+        func getValue() -> Int { 42 }
+        ```
+
+        > Uwaga: to tylko przykład.
+        """
+        controller.show(text: sample)
         print("windowNumber=\(controller.windowNumber)")
         app.run()
     }

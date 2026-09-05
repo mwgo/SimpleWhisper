@@ -607,6 +607,11 @@ struct AISettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Reset to default") { settings.defaultShellCommand = NamedPrompt.defaultShellCommand }
             }
+            Section("Result window") {
+                Toggle("Ask for Markdown when the result cannot be pasted", isOn: Binding(get: { settings.markdownWhenNotPasting }, set: { settings.markdownWhenNotPasting = $0 }))
+                Text("When no text field is active at the start of dictation, the result is shown in a window instead of being pasted. With this on, prompts and commands ask the AI for Markdown, and the window renders it (switch to Source to edit).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Command mode command") {
                 TextField("Command", text: Binding(get: { settings.commandShellCommand }, set: { settings.commandShellCommand = $0 }), axis: .vertical)
                     .font(.system(.body, design: .monospaced))
