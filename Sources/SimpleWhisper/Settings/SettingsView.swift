@@ -28,6 +28,17 @@ struct SettingsView: View {
         }
         .frame(width: 700, height: 480)
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        .task {
+            // Developer aid: SW_SETTINGS_CYCLE=1 switches tabs every second (crash test for --settings-demo).
+            guard ProcessInfo.processInfo.environment["SW_SETTINGS_CYCLE"] != nil else { return }
+            let tabs = ["general", "prompts", "vocabulary", "macros", "ai", "about"]
+            var index = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                index = (index + 1) % tabs.count
+                tab = tabs[index]
+            }
+        }
     }
 }
 
@@ -337,37 +348,39 @@ struct VocabularySettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.horizontal, .top])
-            Table(store.vocabulary, selection: $selection) {
-                TableColumn("Term") { term in
-                    TextField("Term", text: binding(for: term.id, keyPath: \.text))
-                }
-                TableColumn("Aliases (comma-separated misrecognitions)") { term in
-                    TextField("e.g. enowa, e nova", text: aliasesBinding(for: term.id))
-                }
-                TableColumn("") { term in
-                    Button {
-                        if selection == term.id { selection = nil }
-                        store.vocabulary.removeAll { $0.id == term.id }
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Remove term")
-                }
-                .width(28)
+            HStack {
+                Text("Term").frame(width: 200, alignment: .leading)
+                Text("Aliases (comma-separated misrecognitions)")
+                Spacer()
             }
+            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 4)
+            List {
+                ForEach(store.vocabulary) { term in
+                    HStack(spacing: 8) {
+                        TextField("Term", text: binding(for: term.id, keyPath: \.text))
+                            .frame(width: 200)
+                        TextField("e.g. enowa, e nova", text: aliasesBinding(for: term.id))
+                        Button {
+                            store.vocabulary.removeAll { $0.id == term.id }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove term")
+                    }
+                    .textFieldStyle(.roundedBorder)
+                }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
             listToolbar(
                 add: {
                     let term = VocabularyTerm(text: "")
                     store.vocabulary.append(term)
                     selection = term.id
                 },
-                remove: {
-                    guard let selection else { return }
-                    store.vocabulary.removeAll { $0.id == selection }
-                    self.selection = nil
-                },
-                canRemove: selection != nil
+                remove: {},
+                canRemove: false
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -408,48 +421,49 @@ struct MacrosSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.horizontal, .top])
-            Table(store.macros, selection: $selection) {
-                TableColumn("Keywords (comma-separated)") { macro in
-                    TextField("schowek, clipboard", text: keywordsBinding(for: macro.id))
-                }
-                TableColumn("Action") { macro in
-                    Picker("", selection: actionBinding(for: macro.id)) {
-                        ForEach(MacroActionKind.allCases) { kind in Text(kind.title).tag(kind) }
-                    }
-                    .labelsHidden()
-                }
-                .width(150)
-                TableColumn("Text") { macro in
-                    if macro.action == .insertText {
-                        TextField("Text to insert", text: textBinding(for: macro.id))
-                    } else {
-                        Text("—").foregroundStyle(.tertiary)
-                    }
-                }
-                TableColumn("") { macro in
-                    Button {
-                        if selection == macro.id { selection = nil }
-                        store.macros.removeAll { $0.id == macro.id }
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Remove macro")
-                }
-                .width(28)
+            HStack {
+                Text("Keywords (comma-separated)").frame(width: 240, alignment: .leading)
+                Text("Action").frame(width: 150, alignment: .leading)
+                Text("Text")
+                Spacer()
             }
+            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 4)
+            List {
+                ForEach(store.macros) { macro in
+                    HStack(spacing: 8) {
+                        TextField("schowek, clipboard", text: keywordsBinding(for: macro.id))
+                            .frame(width: 240)
+                        Picker("", selection: actionBinding(for: macro.id)) {
+                            ForEach(MacroActionKind.allCases) { kind in Text(kind.title).tag(kind) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                        if macro.action == .insertText {
+                            TextField("Text to insert", text: textBinding(for: macro.id))
+                        } else {
+                            Text("—").foregroundStyle(.tertiary).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Button {
+                            store.macros.removeAll { $0.id == macro.id }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove macro")
+                    }
+                    .textFieldStyle(.roundedBorder)
+                }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
             listToolbar(
                 add: {
                     let macro = VoiceMacro(keywords: [], action: .insertText)
                     store.macros.append(macro)
                     selection = macro.id
                 },
-                remove: {
-                    guard let selection else { return }
-                    store.macros.removeAll { $0.id == selection }
-                    self.selection = nil
-                },
-                canRemove: selection != nil
+                remove: {},
+                canRemove: false
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
