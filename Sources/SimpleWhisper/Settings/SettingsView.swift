@@ -249,9 +249,9 @@ struct PromptsSettingsView: View {
                     },
                     remove: {
                         guard let selection else { return }
-                        store.prompts.removeAll { $0.id == selection }
-                        if settings.selectedPromptID == selection { settings.selectedPromptID = nil }
                         self.selection = nil
+                        if settings.selectedPromptID == selection { settings.selectedPromptID = nil }
+                        store.prompts.removeAll { $0.id == selection }
                     },
                     canRemove: selection != nil
                 )
@@ -260,9 +260,18 @@ struct PromptsSettingsView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             Divider()
             Group {
-                if let index = store.prompts.firstIndex(where: { $0.id == selection }) {
-                    let binding = Binding(get: { store.prompts[index] }, set: { store.prompts[index] = $0 })
+                if let selected = selection, let current = store.prompts.first(where: { $0.id == selected }) {
+                    // Look the prompt up by id on every access: an index would go stale when the row is removed.
+                    let binding = Binding(
+                        get: { store.prompts.first(where: { $0.id == selected }) ?? current },
+                        set: { value in
+                            if let index = store.prompts.firstIndex(where: { $0.id == selected }) {
+                                store.prompts[index] = value
+                            }
+                        }
+                    )
                     PromptEditor(prompt: binding, settings: settings)
+                        .id(selected)
                 } else {
                     ContentUnavailableView("Select a prompt", systemImage: "text.bubble", description: Text("Prompts post-process dictated text with AI. Pick one from the HUD or the menu bar."))
                 }
@@ -335,6 +344,17 @@ struct VocabularySettingsView: View {
                 TableColumn("Aliases (comma-separated misrecognitions)") { term in
                     TextField("e.g. enowa, e nova", text: aliasesBinding(for: term.id))
                 }
+                TableColumn("") { term in
+                    Button {
+                        if selection == term.id { selection = nil }
+                        store.vocabulary.removeAll { $0.id == term.id }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove term")
+                }
+                .width(28)
             }
             listToolbar(
                 add: {
@@ -406,6 +426,17 @@ struct MacrosSettingsView: View {
                         Text("—").foregroundStyle(.tertiary)
                     }
                 }
+                TableColumn("") { macro in
+                    Button {
+                        if selection == macro.id { selection = nil }
+                        store.macros.removeAll { $0.id == macro.id }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove macro")
+                }
+                .width(28)
             }
             listToolbar(
                 add: {

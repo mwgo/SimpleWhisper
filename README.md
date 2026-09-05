@@ -14,7 +14,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   Apple Speech. Models download on first use.
 - **Language**: auto-detect among a configurable set of languages (default Polish + English; any of
   Whisper's 99 languages can be added), or a fixed language, or auto-detect anything. Mixed sentences are fine.
-- **Vocabulary**: words the models tend to get wrong (e.g. `enova365`) plus aliases that are
+- **Vocabulary**: words the models tend to get wrong plus aliases that are
   always corrected in the final text.
 - **Voice macros**: say “schowek” / “clipboard” to insert the clipboard content (captured when
   recording starts); “nowa linia” / “new line” for a line break; custom text macros.
