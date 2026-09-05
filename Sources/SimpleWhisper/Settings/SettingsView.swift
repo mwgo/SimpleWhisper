@@ -3,19 +3,25 @@ import AppKit
 
 struct SettingsView: View {
     var controller: DictationController
+    @State private var tab: String = ProcessInfo.processInfo.environment["SW_SETTINGS_TAB"] ?? "general"
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettingsView(controller: controller)
                 .tabItem { Label("General", systemImage: "gear") }
+                .tag("general")
             PromptsSettingsView(store: controller.store, settings: controller.settings)
                 .tabItem { Label("Prompts", systemImage: "text.bubble") }
+                .tag("prompts")
             VocabularySettingsView(store: controller.store)
                 .tabItem { Label("Vocabulary", systemImage: "character.book.closed") }
+                .tag("vocabulary")
             MacrosSettingsView(store: controller.store)
                 .tabItem { Label("Macros", systemImage: "wand.and.stars") }
+                .tag("macros")
             AISettingsView(settings: controller.settings)
                 .tabItem { Label("AI", systemImage: "sparkles") }
+                .tag("ai")
         }
         .frame(width: 620, height: 460)
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
@@ -46,11 +52,7 @@ struct GeneralSettingsView: View {
                 }
             }
             Section("Language") {
-                Picker("Recognition language", selection: Binding(get: { settings.languageMode }, set: { settings.languageMode = $0 })) {
-                    ForEach(LanguageMode.allCases) { mode in Text(mode.title).tag(mode) }
-                }
-                Text("Auto (Polish + English) restricts detection to those two languages so short phrases are never mistaken for other Slavic languages.")
-                    .font(.caption).foregroundStyle(.secondary)
+                LanguageSettingsSection(settings: settings)
             }
             Section("Hotkey") {
                 Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels.")
@@ -96,6 +98,121 @@ struct GeneralSettingsView: View {
     }
 }
 
+// MARK: - Language
+
+struct LanguageSettingsSection: View {
+    var settings: AppSettings
+    @State private var filter = ""
+
+    private enum ModeKind: String, CaseIterable, Identifiable {
+        case selected, fixed, any
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .selected: return "Auto-detect among selected languages"
+            case .fixed: return "Always one language"
+            case .any: return "Auto-detect any language"
+            }
+        }
+    }
+
+    private var modeKind: Binding<ModeKind> {
+        Binding(
+            get: {
+                switch settings.languageMode {
+                case .auto(let allowed): return allowed.isEmpty ? .any : .selected
+                case .fixed: return .fixed
+                }
+            },
+            set: { kind in
+                switch kind {
+                case .selected: settings.languageMode = .auto(allowed: settings.selectedLanguages)
+                case .any: settings.languageMode = .any
+                case .fixed: settings.languageMode = .fixed(settings.languageMode.fixedCode ?? settings.selectedLanguages.first ?? "en")
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        Picker("Recognition", selection: modeKind) {
+            ForEach(ModeKind.allCases) { kind in Text(kind.title).tag(kind) }
+        }
+        switch modeKind.wrappedValue {
+        case .selected:
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Languages")
+                    Spacer()
+                    TextField("", text: $filter, prompt: Text("Filter…"))
+                        .textFieldStyle(.roundedBorder)
+                        .labelsHidden()
+                        .frame(width: 200)
+                }
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3), alignment: .leading, spacing: 4) {
+                        ForEach(filteredCodes, id: \.self) { code in
+                            Toggle(isOn: languageToggle(code)) {
+                                HStack(spacing: 4) {
+                                    Text(LanguageCatalog.name(for: code)).lineLimit(1)
+                                    Text(code).foregroundStyle(.secondary).font(.caption)
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(height: 170)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+                Text("Selected: " + settings.selectedLanguages.map { LanguageCatalog.name(for: $0) }.joined(separator: ", "))
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Detection is restricted to the selected languages, so short phrases are never mistaken for a similar language. Mixed sentences are fine; the dominant language decides.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .fixed:
+            Picker("Language", selection: Binding(
+                get: { settings.languageMode.fixedCode ?? "en" },
+                set: { settings.languageMode = .fixed($0) }
+            )) {
+                ForEach(LanguageCatalog.allCodes, id: \.self) { code in
+                    Text("\(LanguageCatalog.name(for: code)) (\(code))").tag(code)
+                }
+            }
+        case .any:
+            Text("Whisper and Parakeet detect the language themselves; Apple Speech falls back to the selected languages.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var filteredCodes: [String] {
+        let query = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        let codes = LanguageCatalog.allCodes
+        let selectedFirst = codes.sorted { a, b in
+            let sa = settings.selectedLanguages.contains(a), sb = settings.selectedLanguages.contains(b)
+            if sa != sb { return sa }
+            return LanguageCatalog.name(for: a) < LanguageCatalog.name(for: b)
+        }
+        guard !query.isEmpty else { return selectedFirst }
+        return selectedFirst.filter { code in
+            LanguageCatalog.name(for: code).lowercased().hasPrefix(query) || code.hasPrefix(query)
+        }
+    }
+
+    private func languageToggle(_ code: String) -> Binding<Bool> {
+        Binding(
+            get: { settings.selectedLanguages.contains(code) },
+            set: { on in
+                var list = settings.selectedLanguages
+                if on, !list.contains(code) { list.append(code) }
+                if !on { list.removeAll { $0 == code } }
+                if list.isEmpty { list = ["en"] }
+                settings.selectedLanguages = list
+            }
+        )
+    }
+}
+
 // MARK: - Prompts
 
 struct PromptsSettingsView: View {
@@ -104,7 +221,7 @@ struct PromptsSettingsView: View {
     @State private var selection: UUID?
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             VStack(spacing: 0) {
                 List(selection: $selection) {
                     ForEach(store.prompts) { prompt in
@@ -119,6 +236,8 @@ struct PromptsSettingsView: View {
                     }
                     .onMove { store.prompts.move(fromOffsets: $0, toOffset: $1) }
                 }
+                .listStyle(.inset(alternatesRowBackgrounds: false))
+                Divider()
                 listToolbar(
                     add: {
                         let prompt = NamedPrompt(name: "New prompt", instructions: "", shellCommand: settings.defaultShellCommand)
@@ -134,16 +253,21 @@ struct PromptsSettingsView: View {
                     canRemove: selection != nil
                 )
             }
-            .frame(minWidth: 180, maxWidth: 220)
-
-            if let index = store.prompts.firstIndex(where: { $0.id == selection }) {
-                let binding = Binding(get: { store.prompts[index] }, set: { store.prompts[index] = $0 })
-                PromptEditor(prompt: binding, settings: settings)
-                    .padding()
-            } else {
-                ContentUnavailableView("Select a prompt", systemImage: "text.bubble", description: Text("Prompts post-process dictated text with AI. Pick one from the HUD or the menu bar."))
+            .frame(width: 200)
+            .background(Color(nsColor: .controlBackgroundColor))
+            Divider()
+            Group {
+                if let index = store.prompts.firstIndex(where: { $0.id == selection }) {
+                    let binding = Binding(get: { store.prompts[index] }, set: { store.prompts[index] = $0 })
+                    PromptEditor(prompt: binding, settings: settings)
+                } else {
+                    ContentUnavailableView("Select a prompt", systemImage: "text.bubble", description: Text("Prompts post-process dictated text with AI. Pick one from the HUD or the menu bar."))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { if selection == nil { selection = store.prompts.first?.id } }
     }
 }
 
@@ -158,15 +282,26 @@ struct PromptEditor: View {
                 ForEach(PromptProvider.allCases) { provider in Text(provider.title).tag(provider) }
             }
             if prompt.provider == .shell {
-                TextField("Command", text: $prompt.shellCommand)
-                    .font(.system(.body, design: .monospaced))
-                Text("Text is written to stdin. {prompt} (or $SW_PROMPT) receives the instructions. stdout becomes the result.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Command")
+                    TextField("", text: $prompt.shellCommand, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .labelsHidden()
+                        .font(.system(.body, design: .monospaced))
+                        .lineLimit(1...3)
+                    Text("Text is written to stdin. {prompt} (or $SW_PROMPT) receives the instructions. stdout becomes the result.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
-            LabeledContent("Instructions") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Instructions")
                 TextEditor(text: $prompt.instructions)
                     .font(.body)
-                    .frame(minHeight: 160)
+                    .multilineTextAlignment(.leading)
+                    .frame(minHeight: 140)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
             }
             Toggle("Use this prompt for dictation", isOn: Binding(
@@ -212,6 +347,7 @@ struct VocabularySettingsView: View {
                 canRemove: selection != nil
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func binding(for id: UUID, keyPath: WritableKeyPath<VocabularyTerm, String>) -> Binding<String> {
@@ -282,6 +418,7 @@ struct MacrosSettingsView: View {
                 canRemove: selection != nil
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func index(of id: UUID) -> Int? { store.macros.firstIndex { $0.id == id } }

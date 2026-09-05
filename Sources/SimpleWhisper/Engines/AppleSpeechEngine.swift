@@ -10,10 +10,8 @@ import NaturalLanguage
 final class AppleSpeechEngine: SpeechEngine {
     let kind: EngineKind = .appleSpeech
     private(set) var isReady = false
-    private let locales: [String: Locale] = [
-        "pl": Locale(identifier: "pl-PL"),
-        "en": Locale(identifier: "en-US"),
-    ]
+    /// Languages whose assets have been checked/installed in `prepare`.
+    private var preparedCodes: Set<String> = []
 
     private enum Module {
         case transcriber(SpeechTranscriber)
@@ -29,24 +27,35 @@ final class AppleSpeechEngine: SpeechEngine {
 
     func prepare(status: @escaping EngineStatusHandler) async throws {
         if isReady { return }
-        for (code, locale) in locales {
-            guard let module = try await makeModule(for: locale, withConfidence: false) else { continue }
-            if let request = try await AssetInventory.assetInstallationRequest(supporting: [module.speechModule]) {
-                status("Downloading Apple speech assets (\(code.uppercased()))…")
-                try await request.downloadAndInstall()
-            }
-        }
+        try await ensureAssets(for: ["en"], status: status)
         isReady = true
         status("Model ready")
     }
 
+    private func ensureAssets(for codes: [String], status: EngineStatusHandler?) async throws {
+        for code in codes where !preparedCodes.contains(code) {
+            guard let module = try await makeModule(for: LanguageCatalog.locale(for: code), withConfidence: false) else { continue }
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [module.speechModule]) {
+                status?("Downloading Apple speech assets (\(code.uppercased()))…")
+                try await request.downloadAndInstall()
+            }
+            preparedCodes.insert(code)
+        }
+    }
+
     func transcribe(samples: [Float], language: LanguageMode, vocabulary: [VocabularyTerm]) async throws -> Transcription {
-        let codes = language.fixedCode.map { [$0] } ?? (language.allowedCodes ?? ["pl", "en"])
+        let codes = language.candidateCodes
+        try await ensureAssets(for: codes, status: nil)
         var best: (code: String, text: String, score: Double)?
         var notes: [String] = []
         for code in codes {
-            guard let locale = locales[code] else { continue }
-            let pass = try await run(locale: locale, samples: samples)
+            let pass: (text: String, confidence: Double, module: String)
+            do {
+                pass = try await run(locale: LanguageCatalog.locale(for: code), samples: samples)
+            } catch EngineError.localeUnsupported {
+                notes.append("\(code): unsupported")
+                continue
+            }
             try Task.checkCancellation()
             let score = Self.score(text: pass.text, confidence: pass.confidence, language: code, allowed: codes)
             notes.append("\(code): conf=\(String(format: "%.2f", pass.confidence)) score=\(String(format: "%.2f", score)) [\(pass.module)]")

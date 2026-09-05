@@ -12,7 +12,8 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   recording/transcribing; click it to pick a post-processing prompt.
 - **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
   Apple Speech. Models download on first use.
-- **Language**: Auto (Polish + English) by default, mixed sentences are fine. Also Polish, English, Auto (any).
+- **Language**: auto-detect among a configurable set of languages (default Polish + English; any of
+  Whisper's 99 languages can be added), or a fixed language, or auto-detect anything. Mixed sentences are fine.
 - **Vocabulary**: words the models tend to get wrong (e.g. `enova365`) plus aliases that are
   always corrected in the final text.
 - **Voice macros**: say “schowek” / “clipboard” to insert the clipboard content (captured when
@@ -49,10 +50,11 @@ The same binary can run the whole pipeline on an audio file (no microphone or pe
 
 ```bash
 .build/release/SimpleWhisper --transcribe test.aiff --engine whisperSmall
-.build/release/SimpleWhisper --transcribe test.aiff --engine parakeetV3 --language polish
+.build/release/SimpleWhisper --transcribe test.aiff --engine parakeetV3 --language pl        # or pl,en,de / any
 .build/release/SimpleWhisper --transcribe test.aiff --prompt "Clean up" --clipboard "some code"
 .build/release/SimpleWhisper --apple-locales      # which locales Apple Speech supports/installed
 .build/release/SimpleWhisper --hud-demo           # cycles the HUD through its animations (5 s each)
+.build/release/SimpleWhisper --settings-demo      # opens the Settings view in a plain window
 ```
 
 Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enova365" -o test.aiff`.
@@ -66,8 +68,9 @@ Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enov
 - **Apple Speech**: English uses the new `SpeechTranscriber`; Polish is not supported by it, so the
   older `DictationTranscriber` is used (lower quality). Whisper Large v3 Turbo or Parakeet v3 give
   much better Polish.
-- Language auto-detection is restricted to Polish/English by default so short phrases are not
-  mistaken for Russian or Czech.
+- Language auto-detection is restricted to the selected languages (default Polish/English) so short
+  phrases are not mistaken for a similar language. Apple Speech supports only some languages
+  (see `--apple-locales`); unsupported ones are skipped.
 - Whisper decodes in the detected dominant language; English identifiers inside a Polish sentence are kept.
 - Data lives in `~/Library/Application Support/SimpleWhisper/` (prompts, vocabulary, macros as JSON)
   and `UserDefaults`. Whisper models are cached in `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/`,

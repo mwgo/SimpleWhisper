@@ -23,6 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller.start()
+        // Developer aid: SW_OPEN_SETTINGS=1 opens the Settings window right away (for screenshots).
+        if ProcessInfo.processInfo.environment["SW_OPEN_SETTINGS"] != nil {
+            for delay in [1.0, 2.0, 3.5] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    let opened = NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                        || NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+                    let frames = NSApp.windows.filter { $0.isVisible && $0.title.isEmpty == false }.map { window -> String in
+                        let f = window.frame
+                        let top = (NSScreen.screens.first?.frame.height ?? 0) - f.maxY
+                        return "\(window.title)@\(Int(f.minX)),\(Int(top)),\(Int(f.width)),\(Int(f.height))"
+                    }
+                    DebugLog.write("SW_OPEN_SETTINGS: opened=\(opened) windows=\(frames)")
+                }
+            }
+        }
     }
 }
 
@@ -47,7 +63,7 @@ struct MenuContent: View {
         let store = controller.store
 
         Text(state.phase.title)
-        Text(state.modelStatus)
+        if state.isModelLoading { Text(state.modelStatus) }
         if let summary = state.lastSummary { Text(summary) }
         if let anchor = state.hudAnchor { Text("HUD position: \(anchor)") }
         if let error = state.lastError { Text("⚠︎ \(error)") }
@@ -72,14 +88,12 @@ struct MenuContent: View {
             ForEach(EngineKind.allCases) { kind in Text(kind.title).tag(kind) }
         }
         Picker("Language", selection: Binding(get: { settings.languageMode }, set: { settings.languageMode = $0 })) {
-            ForEach(LanguageMode.allCases) { mode in Text(mode.title).tag(mode) }
+            ForEach(settings.languageMenuOptions, id: \.self) { mode in Text(mode.title).tag(mode) }
         }
         Picker("Prompt", selection: Binding<UUID?>(get: { settings.selectedPromptID }, set: { settings.selectedPromptID = $0 })) {
             Text("Plain text (no prompt)").tag(UUID?.none)
             ForEach(store.prompts) { prompt in Text(prompt.name).tag(UUID?.some(prompt.id)) }
         }
-        Button(state.isModelLoading ? "Loading model…" : "Load model now") { Task { await controller.loadModel() } }
-            .disabled(state.isModelLoading)
         Divider()
 
         SettingsLink { Text("Settings…") }

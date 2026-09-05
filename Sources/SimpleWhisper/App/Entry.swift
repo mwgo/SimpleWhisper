@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 import AppKit
 import WhisperKit
@@ -7,6 +8,7 @@ import WhisperKit
 @main
 enum Entry {
     static func main() {
+        setbuf(stdout, nil)
         let arguments = Array(CommandLine.arguments.dropFirst())
         if arguments.contains("--transcribe") || arguments.contains("--help") || arguments.contains("--apple-locales") {
             // handled below
@@ -23,6 +25,10 @@ enum Entry {
         }
         if arguments.contains("--hud-demo") {
             HUDDemo.run()
+            return
+        }
+        if arguments.contains("--settings-demo") {
+            SettingsDemo.run()
             return
         }
         SimpleWhisperApp.main()
@@ -70,7 +76,7 @@ enum DebugCLI {
                          [--prompt <name>] [--clipboard <text>] [--no-vocabulary]
 
       --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech
-      --language   autoPolishEnglish (default) | polish | english | autoAny
+      --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
       --prompt     name of a saved prompt to post-process the text with AI
       --clipboard  text used for the clipboard macro (default: current clipboard)
     """
@@ -93,7 +99,7 @@ enum DebugCLI {
             return 2
         }
         let engineKind = value("--engine").flatMap(EngineKind.init(rawValue:)) ?? .whisperSmall
-        let languageMode = value("--language").flatMap(LanguageMode.init(rawValue:)) ?? .autoPolishEnglish
+        let languageMode = value("--language").flatMap(LanguageMode.parse) ?? .default
         let store = DataStore()
         let vocabulary = arguments.contains("--no-vocabulary") ? [] : store.effectiveVocabulary
         let clipboard = value("--clipboard")
@@ -101,7 +107,7 @@ enum DebugCLI {
         do {
             let started = Date()
             let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: path)
-            print("Audio: \(String(format: "%.1f", Double(samples.count) / 16_000)) s, engine: \(engineKind.rawValue), language: \(languageMode.rawValue)")
+            print("Audio: \(String(format: "%.1f", Double(samples.count) / 16_000)) s, engine: \(engineKind.rawValue), language: \(languageMode.title)")
 
             let engine = EngineFactory.make(engineKind)
             try await engine.prepare { status in print("  [model] \(status)") }
@@ -165,5 +171,29 @@ extension DebugCLI {
             let status = await AssetInventory.status(forModules: [transcriber])
             print("\(id) -> \(match.identifier): status \(status)")
         }
+    }
+}
+
+/// Hosts the Settings view in a plain window at a fixed position (100,100 from bottom-left),
+/// for screenshots: `--settings-demo`.
+@MainActor
+enum SettingsDemo {
+    private static var window: NSWindow?
+    private static var controller: DictationController?
+
+    static func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        let controller = DictationController()
+        self.controller = controller
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 620, height: 460),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = "Settings (demo)"
+        window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
+        app.activate(ignoringOtherApps: true)
+        print("windowNumber=\(window.windowNumber)")
+        app.run()
     }
 }

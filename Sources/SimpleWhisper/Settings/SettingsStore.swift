@@ -10,7 +10,7 @@ final class AppSettings {
         didSet { defaults.set(engineKind.rawValue, forKey: "engineKind") }
     }
     var languageMode: LanguageMode {
-        didSet { defaults.set(languageMode.rawValue, forKey: "languageMode") }
+        didSet { defaults.set(try? JSONEncoder().encode(languageMode), forKey: "languageModeJSON") }
     }
     var selectedPromptID: UUID? {
         didSet { defaults.set(selectedPromptID?.uuidString, forKey: "selectedPromptID") }
@@ -24,14 +24,36 @@ final class AppSettings {
     var defaultShellCommand: String {
         didSet { defaults.set(defaultShellCommand, forKey: "defaultShellCommand") }
     }
+    /// Languages offered for automatic detection (ISO 639-1 codes), edited in Settings.
+    var selectedLanguages: [String] {
+        didSet {
+            defaults.set(selectedLanguages, forKey: "selectedLanguages")
+            if case .auto(let allowed) = languageMode, !allowed.isEmpty {
+                languageMode = .auto(allowed: selectedLanguages)
+            }
+        }
+    }
+
+    /// Entries for the quick language switch in the menu bar.
+    var languageMenuOptions: [LanguageMode] {
+        var options: [LanguageMode] = [.auto(allowed: selectedLanguages), .any]
+        options += selectedLanguages.map { LanguageMode.fixed($0) }
+        if !options.contains(languageMode) { options.append(languageMode) }
+        return options
+    }
 
     init() {
         engineKind = EngineKind(rawValue: defaults.string(forKey: "engineKind") ?? "") ?? .whisperSmall
-        languageMode = LanguageMode(rawValue: defaults.string(forKey: "languageMode") ?? "") ?? .autoPolishEnglish
+        if let data = defaults.data(forKey: "languageModeJSON"), let mode = try? JSONDecoder().decode(LanguageMode.self, from: data) {
+            languageMode = mode
+        } else {
+            languageMode = LanguageMode.parse(defaults.string(forKey: "languageMode") ?? "") ?? .default
+        }
         selectedPromptID = defaults.string(forKey: "selectedPromptID").flatMap(UUID.init(uuidString:))
         keepTextInClipboard = defaults.object(forKey: "keepTextInClipboard") as? Bool ?? false
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         defaultShellCommand = defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand
+        selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
     }
 }
 
