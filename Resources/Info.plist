@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>SimpleWhisper</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>pl.wojas.SimpleWhisper</string>
 	<key>CFBundleInfoDictionaryVersion</key>

@@ -186,7 +186,7 @@ enum SettingsDemo {
         app.setActivationPolicy(.regular)
         let controller = DictationController()
         self.controller = controller
-        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 620, height: 460),
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 700, height: 480),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Settings (demo)"
         window.contentView = NSHostingView(rootView: SettingsView(controller: controller))

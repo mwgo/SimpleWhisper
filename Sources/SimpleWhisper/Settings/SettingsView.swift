@@ -22,8 +22,11 @@ struct SettingsView: View {
             AISettingsView(settings: controller.settings)
                 .tabItem { Label("AI", systemImage: "sparkles") }
                 .tag("ai")
+            AboutView()
+                .tabItem { Label("About", systemImage: "info.circle") }
+                .tag("about")
         }
-        .frame(width: 620, height: 460)
+        .frame(width: 700, height: 480)
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
     }
 }
@@ -466,6 +469,68 @@ struct AISettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - About
+
+struct AboutView: View {
+    private var version: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "dev"
+        let build = info["CFBundleVersion"] as? String ?? "-"
+        return "Version \(short) (\(build))"
+    }
+
+    private let components: [(String, String, String)] = [
+        ("WhisperKit", "Argmax · OpenAI Whisper on CoreML", "https://github.com/argmaxinc/argmax-oss-swift"),
+        ("FluidAudio", "NVIDIA Parakeet TDT 0.6B v3 on CoreML", "https://github.com/FluidInference/FluidAudio"),
+        ("Apple Speech", "SpeechAnalyzer / DictationTranscriber (macOS 26)", "https://developer.apple.com/documentation/speech"),
+        ("Claude Code CLI", "AI post-processing via `claude -p`", "https://claude.com/claude-code"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+                .shadow(radius: 6, y: 3)
+            VStack(spacing: 4) {
+                Text("SimpleWhisper").font(.title2.weight(.semibold))
+                Text(version).font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Local dictation for macOS. Press the Globe/fn key, speak in any of many languages, and the text lands in your editor. Speech models run on-device; optional AI prompts clean up or transform the text.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 460)
+            Text("SimpleWhisper is completely free. No subscription, no account, no tracking.")
+                .font(.callout.weight(.medium))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 460)
+            Divider().frame(maxWidth: 440)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Built with").font(.headline)
+                ForEach(components, id: \.0) { name, description, url in
+                    HStack(alignment: .firstTextBaseline) {
+                        Link(name, destination: URL(string: url)!)
+                            .frame(width: 130, alignment: .leading)
+                        Text(description).foregroundStyle(.secondary).font(.callout)
+                    }
+                }
+            }
+            .frame(maxWidth: 440, alignment: .leading)
+            Spacer(minLength: 0)
+            HStack {
+                Button("Open data folder") { NSWorkspace.shared.open(DataStore.directory) }
+                Button("Open debug log") { NSWorkspace.shared.open(DataStore.directory.appendingPathComponent("debug.log")) }
+            }
+            Text("© 2026 Marcin Wojas").font(.caption).foregroundStyle(.tertiary)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
