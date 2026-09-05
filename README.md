@@ -115,3 +115,7 @@ Sources/SimpleWhisper/
   HUD/        floating green capsule near the caret, prompt menu
   Settings/   SwiftUI settings window (General, Prompts, Vocabulary, Macros, AI)
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
