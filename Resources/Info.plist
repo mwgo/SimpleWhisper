@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>SimpleWhisper</string>
+	<key>CFBundleIdentifier</key>
+	<string>pl.wojas.SimpleWhisper</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>SimpleWhisper</string>
+	<key>CFBundleDisplayName</key>
+	<string>SimpleWhisper</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppSleepDisabled</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SimpleWhisper records your voice to turn it into text.</string>
+	<key>NSInputMonitoringUsageDescription</key>
+	<string>SimpleWhisper listens for the Globe/fn key to start dictation and for Escape to cancel it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SimpleWhisper can use the built-in Apple speech recognizer.</string>
+</dict>
+</plist>

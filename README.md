@@ -1,0 +1,99 @@
+# SimpleWhisper
+
+Local, menu-bar dictation for macOS 26 (Apple Silicon). Speak, and the text lands in the
+editor you were typing in. Everything runs on-device: Whisper (WhisperKit), NVIDIA Parakeet v3
+(FluidAudio) or Apple's built-in speech recognizers. Optional AI post-processing with named
+prompts (Apple Intelligence or any CLI such as `claude -p`).
+
+## Features
+
+- **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels.
+- **Menu bar only** (no Dock icon). A small green HUD appears next to the text caret while
+  recording/transcribing; click it to pick a post-processing prompt.
+- **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
+  Apple Speech. Models download on first use.
+- **Language**: Auto (Polish + English) by default, mixed sentences are fine. Also Polish, English, Auto (any).
+- **Vocabulary**: words the models tend to get wrong (e.g. `enova365`) plus aliases that are
+  always corrected in the final text.
+- **Voice macros**: say “schowek” / “clipboard” to insert the clipboard content (captured when
+  recording starts); “nowa linia” / “new line” for a line break; custom text macros.
+- **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
+  Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
+
+## Build & run
+
+```bash
+Scripts/make-app.sh            # release build → build/SimpleWhisper.app, then opens it
+Scripts/make-app.sh debug      # faster debug build
+```
+
+Requires Xcode 26 / Swift 6.2. No Xcode project; it is a Swift Package plus a script that wraps the
+binary in an `.app` (needed for the permission prompts).
+
+### Permissions (System Settings › Privacy & Security)
+
+| Permission | Why |
+|---|---|
+| Microphone | recording |
+| Accessibility | paste via ⌘V, caret position for the HUD, global key listener |
+| Input Monitoring | Globe/fn and Esc key detection |
+
+Also set **System Settings › Keyboard › “Press 🌐 key to” → Do Nothing**, otherwise macOS opens the
+emoji picker / system dictation.
+
+
+
+## Test from the command line
+
+The same binary can run the whole pipeline on an audio file (no microphone or permissions needed):
+
+```bash
+.build/release/SimpleWhisper --transcribe test.aiff --engine whisperSmall
+.build/release/SimpleWhisper --transcribe test.aiff --engine parakeetV3 --language polish
+.build/release/SimpleWhisper --transcribe test.aiff --prompt "Clean up" --clipboard "some code"
+.build/release/SimpleWhisper --apple-locales      # which locales Apple Speech supports/installed
+.build/release/SimpleWhisper --hud-demo           # cycles the HUD through its animations (5 s each)
+```
+
+Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enova365" -o test.aiff`.
+
+## Notes and limitations
+
+- `claude -p` needs several seconds (about 4 s with `--model haiku --setting-sources ""`, about 10 s with defaults). The HUD shows an elapsed-seconds counter while it runs.
+- Do not add `--bare` to the `claude -p` command: it skips OAuth login and fails with “Not logged in”.
+- **Apple Intelligence (Foundation Models) does not support Polish** text. Prompts default to the
+  shell provider (`claude -p`). Apple Intelligence works for English-only text.
+- **Apple Speech**: English uses the new `SpeechTranscriber`; Polish is not supported by it, so the
+  older `DictationTranscriber` is used (lower quality). Whisper Large v3 Turbo or Parakeet v3 give
+  much better Polish.
+- Language auto-detection is restricted to Polish/English by default so short phrases are not
+  mistaken for Russian or Czech.
+- Whisper decodes in the detected dominant language; English identifiers inside a Polish sentence are kept.
+- Data lives in `~/Library/Application Support/SimpleWhisper/` (prompts, vocabulary, macros as JSON)
+  and `UserDefaults`. Whisper models are cached in `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/`,
+  Parakeet in `~/Library/Application Support/FluidAudio/`.
+- HUD placement: native text views report the caret rectangle via Accessibility. Electron apps
+  (VS Code, Slack, Claude) report a bogus 0×0 caret at the screen corner, so the frame of the focused
+  hidden text field (kept at the caret by those editors) is used instead. Diagnostics of every
+  placement go to `~/Library/Application Support/SimpleWhisper/debug.log`; the menu bar shows the
+  source used (`caret`, `focusedElement`, `screen`).
+- The app is signed ad-hoc with a designated requirement based only on the bundle identifier, so
+  Accessibility / Input Monitoring grants survive rebuilds. If they ever get stuck, run
+  `tccutil reset Accessibility pl.wojas.SimpleWhisper` (and `ListenEvent`, `PostEvent`, `Microphone`).
+- Not yet implemented: live text while speaking, configurable hotkey, transcription history.
+
+## Project layout
+
+```
+Sources/SimpleWhisper/
+  App/        entry point, menu bar UI, AppState, DictationController (pipeline orchestration)
+  Hotkey/     CGEventTap listener for fn/Esc, permissions helpers
+  Audio/      AVAudioEngine recorder → 16 kHz mono Float32
+  Engines/    SpeechEngine protocol, WhisperKit / Parakeet / Apple implementations, language modes
+  Vocabulary/ custom terms + alias post-processing
+  Macros/     voice macros and two-stage expansion
+  AI/         prompt model, Apple Foundation Models and shell-command processors
+  Output/     clipboard + ⌘V paster
+  HUD/        floating green capsule near the caret, prompt menu
+  Settings/   SwiftUI settings window (General, Prompts, Vocabulary, Macros, AI)
+```
