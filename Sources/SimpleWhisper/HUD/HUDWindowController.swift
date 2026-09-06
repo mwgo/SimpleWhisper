@@ -96,10 +96,21 @@ final class HUDWindowController: NSObject {
         }
     }
 
-    func hide() {
+    /// Plays the disappear animation, then removes the panel. `animated: false` hides immediately.
+    func hide(animated: Bool = true) {
         hideTask?.cancel()
         hideTask = nil
-        panel.orderOut(nil)
+        guard animated, panel.isVisible else {
+            panel.orderOut(nil)
+            return
+        }
+        model.dismissal += 1
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(320))
+            guard !Task.isCancelled else { return }
+            self?.hideTask = nil
+            self?.panel.orderOut(nil)
+        }
     }
 
     /// Human-readable description of the last anchor, for the menu bar status.

@@ -193,7 +193,7 @@ final class DictationController: HotkeyMonitorDelegate {
         pipelineTask = nil
         state.phase = .idle
         endActivity()
-        hud.hide()
+        hud.hide(animated: false)
         DebugLog.write("Recording cancelled silently (key pressed right after fn)")
     }
 

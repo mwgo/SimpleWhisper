@@ -24,6 +24,8 @@ final class HUDModel {
     var theme: HUDTheme = .freshGreen
     /// Incremented on every show() to replay the appear animation.
     var appearance: Int = 0
+    /// Incremented when the HUD is about to hide, to play the mirrored disappear animation.
+    var dismissal: Int = 0
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
 
@@ -48,6 +50,8 @@ struct HUDView: View {
     @State private var dropScale: CGFloat = 0.4
     @State private var dropOpacity: Double = 0
     @State private var ripple: CGFloat = 0
+    /// Leading while appearing (unfolds to the right), trailing while disappearing (folds away to the right).
+    @State private var anchor: UnitPoint = .leading
 
     static let freshGreen = Color(red: 0.24, green: 0.86, blue: 0.52)
     static let ink = Color(red: 0.03, green: 0.18, blue: 0.10)
@@ -104,28 +108,48 @@ struct HUDView: View {
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
         .fixedSize()
-        .scaleEffect(dropScale)
+        // The capsule unfolds from its left edge towards the right, like a drop spreading sideways.
+        .scaleEffect(x: dropScale, y: 0.85 + 0.15 * dropScale, anchor: anchor)
         .opacity(dropOpacity)
         .background {
-            // Water-drop ripple: two rings expanding outwards and fading.
+            // Ripple rings following the same left-to-right spread.
             ZStack {
                 Capsule().stroke(model.theme.background.opacity(0.55), lineWidth: 2)
-                    .scaleEffect(1 + ripple * 0.55).opacity(ripple == 0 ? 0 : (1 - ripple) * 0.8)
+                    .scaleEffect(x: 1 + ripple * 0.35, y: 1 + ripple * 0.55, anchor: anchor)
+                    .opacity(ripple == 0 ? 0 : (1 - ripple) * 0.8)
                 Capsule().stroke(model.theme.background.opacity(0.35), lineWidth: 1.5)
-                    .scaleEffect(1 + ripple * 0.3).opacity(ripple == 0 ? 0 : (1 - ripple) * 0.6)
+                    .scaleEffect(x: 1 + ripple * 0.18, y: 1 + ripple * 0.3, anchor: anchor)
+                    .opacity(ripple == 0 ? 0 : (1 - ripple) * 0.6)
             }
             .allowsHitTesting(false)
         }
         .padding(Self.outerPadding)
         .onAppear(perform: playDropAnimation)
         .onChange(of: model.appearance) { _, _ in playDropAnimation() }
+        .onChange(of: model.dismissal) { _, _ in playDismissAnimation() }
+    }
+
+    /// Mirror of the appear animation: the capsule folds towards its right edge and a ripple runs the same way.
+    private func playDismissAnimation() {
+        anchor = .trailing
+        ripple = 0
+        withAnimation(.easeIn(duration: 0.28)) {
+            dropScale = 0.06
+        }
+        withAnimation(.easeIn(duration: 0.22).delay(0.06)) {
+            dropOpacity = 0
+        }
+        withAnimation(.easeOut(duration: 0.45)) {
+            ripple = 1
+        }
     }
 
     private func playDropAnimation() {
-        dropScale = 0.4
+        anchor = .leading
+        dropScale = 0.08
         dropOpacity = 0
         ripple = 0
-        withAnimation(.interpolatingSpring(mass: 0.6, stiffness: 180, damping: 9, initialVelocity: 6)) {
+        withAnimation(.interpolatingSpring(mass: 0.5, stiffness: 170, damping: 11, initialVelocity: 8)) {
             dropScale = 1
         }
         withAnimation(.easeOut(duration: 0.18)) {
