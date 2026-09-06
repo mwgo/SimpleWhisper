@@ -29,6 +29,8 @@ final class HotkeyMonitor {
     private static let fnKeyCode: Int64 = 63
     private static let escapeKeyCode: Int64 = 53
     private static let controlKeyCodes: Set<Int64> = [59, 62]
+    /// The Globe key also emits its own keyDown (179) besides the flagsChanged event; never treat it as "another key".
+    private static let fnKeyDownCodes: Set<Int64> = [63, 179]
 
     weak var delegate: HotkeyMonitorDelegate?
     var holdThreshold: TimeInterval = 0.4
@@ -114,7 +116,7 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
-            } else if fnDownAt != nil || recentlyStartedByFn {
+            } else if !Self.fnKeyDownCodes.contains(keyCode), fnDownAt != nil || recentlyStartedByFn {
                 // fn+key (or a key right after a short fn press) is a keyboard shortcut, not dictation.
                 comboUsed = true
                 if recentlyStartedByFn {
