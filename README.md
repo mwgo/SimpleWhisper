@@ -34,6 +34,8 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   result replaces the selection.
 - **History** (opt-in, Settings › General): “History…” in the menu bar opens a floating window with the last 10
   dictations and commands (date + wrapped text). Clicking a card copies it to the clipboard; ▶ pastes it into the active editor.
+- **Prompt shortcuts**: each prompt can have a letter; press it while recording to use that prompt for the
+  dictation, press Space for plain text.
 - **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
   Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
 

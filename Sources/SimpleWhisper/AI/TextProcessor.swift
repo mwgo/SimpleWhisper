@@ -42,24 +42,39 @@ struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
     /// Shell template. `{prompt}` (or `$SW_PROMPT`) receives the instructions, `{tools}` the tool flags
     /// (none, or web tools when allowed in Settings › AI); the text arrives on stdin.
     var shellCommand: String = NamedPrompt.defaultShellCommand
+    /// Single letter/digit pressed while recording to select this prompt for the dictation.
+    var shortcut: String = ""
 
     static let defaultShellCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
     /// Command mode edits real text, so it defaults to a stronger (slower) model.
     static let defaultCommandShellCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
 
-    init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .shell, shellCommand: String = NamedPrompt.defaultShellCommand) {
+    init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .shell, shellCommand: String = NamedPrompt.defaultShellCommand, shortcut: String = "") {
         self.id = id
         self.name = name
         self.instructions = instructions
         self.provider = provider
         self.shellCommand = shellCommand
+        self.shortcut = shortcut
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, instructions, provider, shellCommand, shortcut }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        instructions = try c.decode(String.self, forKey: .instructions)
+        provider = try c.decodeIfPresent(PromptProvider.self, forKey: .provider) ?? .shell
+        shellCommand = try c.decodeIfPresent(String.self, forKey: .shellCommand) ?? NamedPrompt.defaultShellCommand
+        shortcut = try c.decodeIfPresent(String.self, forKey: .shortcut) ?? ""
     }
 
     static let defaults: [NamedPrompt] = [
-        NamedPrompt(name: "Clean up", instructions: "Clean up this dictated text: remove filler words and false starts, fix punctuation and capitalization, keep the meaning and wording otherwise unchanged."),
-        NamedPrompt(name: "Formal email", instructions: "Rewrite this dictated text as a short, polite, formal email body. Keep all facts. Do not add a subject line or signature."),
-        NamedPrompt(name: "Bullet points", instructions: "Turn this dictated text into concise bullet points, one idea per bullet. Keep all facts."),
-        NamedPrompt(name: "Translate to English", instructions: "Translate this text into natural English. Output only the translation."),
+        NamedPrompt(name: "Clean up", instructions: "Clean up this dictated text: remove filler words and false starts, fix punctuation and capitalization, keep the meaning and wording otherwise unchanged.", shortcut: "c"),
+        NamedPrompt(name: "Formal email", instructions: "Rewrite this dictated text as a short, polite, formal email body. Keep all facts. Do not add a subject line or signature.", shortcut: "e"),
+        NamedPrompt(name: "Bullet points", instructions: "Turn this dictated text into concise bullet points, one idea per bullet. Keep all facts.", shortcut: "b"),
+        NamedPrompt(name: "Translate to English", instructions: "Translate this text into natural English. Output only the translation.", shortcut: "t"),
     ]
 }
 

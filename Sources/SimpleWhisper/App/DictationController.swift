@@ -173,6 +173,20 @@ final class DictationController: HotkeyMonitorDelegate {
         cancel()
     }
 
+    func hotkeyPromptShortcut(_ character: String) -> Bool {
+        guard state.phase == .recording else { return false }
+        if character == " " {
+            settings.selectedPromptID = nil
+            hud.update(text: "Recording", detail: nil, stage: .recording)
+            return true
+        }
+        let key = character.lowercased()
+        guard let prompt = store.prompts.first(where: { $0.shortcut.lowercased() == key && !$0.shortcut.isEmpty }) else { return false }
+        settings.selectedPromptID = prompt.id
+        hud.update(text: "Recording", detail: prompt.name, stage: .recording)
+        return true
+    }
+
     func hotkeyCancelSilently() {
         guard state.phase == .recording else { return }
         _ = recorder.stop()

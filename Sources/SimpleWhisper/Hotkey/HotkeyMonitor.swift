@@ -14,6 +14,9 @@ protocol HotkeyMonitorDelegate: AnyObject {
     func hotkeyRunCommand() -> Bool
     /// Another key was pressed right after fn started a recording: it was a shortcut (fn+F12…), not dictation.
     func hotkeyCancelSilently()
+    /// A character typed while recording: selects the prompt with that shortcut (space = no prompt).
+    /// Returns true when consumed (the key is then swallowed).
+    func hotkeyPromptShortcut(_ character: String) -> Bool
 }
 
 /// Which modifier key starts dictation.
@@ -177,6 +180,9 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
+            } else if let character = Self.character(of: event), !event.flags.contains(.maskCommand), !event.flags.contains(.maskControl),
+                      promptShortcut(character) {
+                return nil
             } else if !triggerKey.ownKeyDownCodes.contains(keyCode), fnDownAt != nil || recentlyStartedByFn {
                 // fn+key (or a key right after a short fn press) is a keyboard shortcut, not dictation.
                 comboUsed = true
@@ -191,6 +197,21 @@ final class HotkeyMonitor {
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func promptShortcut(_ character: String) -> Bool {
+        var handled = false
+        MainActor.assumeIsolated { handled = delegate?.hotkeyPromptShortcut(character) ?? false }
+        return handled
+    }
+
+    private static func character(of event: CGEvent) -> String? {
+        var length = 0
+        var buffer = [UniChar](repeating: 0, count: 4)
+        event.keyboardGetUnicodeString(maxStringLength: 4, actualStringLength: &length, unicodeString: &buffer)
+        guard length > 0 else { return nil }
+        let string = String(utf16CodeUnits: buffer, count: length)
+        return string.count == 1 ? string : nil
     }
 
     private var recentlyStartedByFn: Bool {

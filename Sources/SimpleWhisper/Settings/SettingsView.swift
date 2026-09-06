@@ -199,6 +199,7 @@ struct HotkeyLegend: View {
                 row("\(k) (hold)", "push-to-talk: release to stop")
             }
             row("esc", "cancel recording or processing")
+            row("letter / space", "while recording: pick the prompt with that shortcut / plain text")
             if commandMode {
                 row("⌃ control", "while recording: run the dictation as a command")
             }
@@ -357,8 +358,14 @@ struct PromptsSettingsView: View {
                     ForEach(store.prompts) { prompt in
                         HStack {
                             Text(prompt.name.isEmpty ? "Untitled" : prompt.name)
+                            Spacer()
+                            if !prompt.shortcut.isEmpty {
+                                Text(prompt.shortcut.uppercased())
+                                    .font(.caption.weight(.semibold).monospaced())
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.2)))
+                            }
                             if settings.selectedPromptID == prompt.id {
-                                Spacer()
                                 Image(systemName: "checkmark").foregroundStyle(.secondary)
                             }
                         }
@@ -417,6 +424,12 @@ struct PromptEditor: View {
     var body: some View {
         Form {
             TextField("Name", text: $prompt.name)
+            TextField("Shortcut key (one letter or digit)", text: Binding(
+                get: { prompt.shortcut },
+                set: { value in prompt.shortcut = String(value.lowercased().filter { $0.isLetter || $0.isNumber }.suffix(1)) }
+            ))
+            Text("Press this key while recording to use the prompt for that dictation. Space selects plain text (no prompt).")
+                .font(.caption).foregroundStyle(.secondary)
             Picker("Provider", selection: $prompt.provider) {
                 ForEach(PromptProvider.allCases) { provider in Text(provider.title).tag(provider) }
             }
