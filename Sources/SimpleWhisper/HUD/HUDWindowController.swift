@@ -56,6 +56,7 @@ final class HUDWindowController: NSObject {
         anchor = CaretLocator.anchor(placement: placement)
         model.showsCommandButton = commandButton
         model.resetLevels()
+        model.appearance += 1
         update(text: text, detail: detail, stage: stage)
         if placement != .hidden { panel.orderFrontRegardless() }
     }
@@ -84,6 +85,7 @@ final class HUDWindowController: NSObject {
         guard placement != .hidden else { return }
         if !panel.isVisible {
             anchor = CaretLocator.anchor(placement: placement)
+            model.appearance += 1
             panel.orderFrontRegardless()
         }
         update(text: text, detail: nil, stage: .message)
@@ -119,13 +121,14 @@ final class HUDWindowController: NSObject {
         let size = hostingView.fittingSize
         guard let anchor else { return }
         var origin: CGPoint
+        let pad = HUDView.outerPadding   // transparent margin around the capsule (ripple room)
         switch anchor.source {
         case .screen:
-            origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y)
+            origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y - pad)
         case .screenTop:
-            origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y - size.height)
+            origin = CGPoint(x: anchor.point.x - size.width / 2, y: anchor.point.y - size.height + pad)
         case .caret, .focusedElement:
-            origin = CGPoint(x: anchor.point.x, y: anchor.point.y - 10 - size.height)
+            origin = CGPoint(x: anchor.point.x - pad, y: anchor.point.y - 10 - size.height + pad)
         }
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor.point) }) ?? NSScreen.main {
             let visible = screen.visibleFrame

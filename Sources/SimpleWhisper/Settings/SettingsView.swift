@@ -120,6 +120,7 @@ struct GeneralSettingsView: View {
             }
             Section("Output") {
                 Toggle("Keep dictated text in the clipboard after pasting", isOn: Binding(get: { settings.keepTextInClipboard }, set: { settings.keepTextInClipboard = $0 }))
+                Toggle("Play a sound when recording starts and stops", isOn: Binding(get: { settings.soundsEnabled }, set: { settings.soundsEnabled = $0; if $0 { SoundPlayer.recordingStarted() } }))
             }
             Section("History") {
                 Toggle("Keep a history of recent dictations and commands", isOn: Binding(get: { settings.historyEnabled }, set: { settings.historyEnabled = $0 }))

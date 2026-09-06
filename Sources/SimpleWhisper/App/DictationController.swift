@@ -221,6 +221,7 @@ final class DictationController: HotkeyMonitorDelegate {
         }
         state.phase = .recording
         beginActivity()
+        if settings.soundsEnabled { SoundPlayer.recordingStarted() }
         hud.placement = settings.hudPlacement
         hud.showsText = settings.hudShowsText
         hud.theme = settings.hudTheme
@@ -235,6 +236,7 @@ final class DictationController: HotkeyMonitorDelegate {
     func stopAndTranscribe() {
         guard state.phase == .recording else { return }
         let samples = recorder.stop()
+        if settings.soundsEnabled { SoundPlayer.recordingStopped() }
         state.phase = .transcribing
         hud.update(text: "Transcribing…", stage: .transcribing)
         pipelineTask = Task { [weak self] in
@@ -246,6 +248,7 @@ final class DictationController: HotkeyMonitorDelegate {
     func stopAndRunCommand() {
         guard state.phase == .recording, settings.commandModeEnabled else { return }
         let samples = recorder.stop()
+        if settings.soundsEnabled { SoundPlayer.recordingStopped() }
         state.phase = .transcribing
         hud.update(text: "Reading selection…", stage: .transcribing)
         pipelineTask = Task { [weak self] in

@@ -11,6 +11,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
 - **No text field active?** The result opens in a window instead: rendered as Markdown when it looks like
   Markdown (with a Source view to edit), plain editable text otherwise. AI prompts/commands are then asked
   for Markdown output (Settings › AI).
+- **Sound cues** on recording start/stop (Settings › General › Output).
 - **Launch at login** toggle (Settings › General › Startup) via the system Login Items mechanism.
 - **Menu bar only** (no Dock icon). A small green HUD appears next to the text caret (or top/bottom of
   the screen, or hidden; nine colour themes; Settings › General › HUD) while recording/transcribing; click it to pick a

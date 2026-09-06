@@ -22,6 +22,8 @@ final class HUDModel {
     /// When false only the animation (and the command button) is shown, no status text.
     var showsText = true
     var theme: HUDTheme = .freshGreen
+    /// Incremented on every show() to replay the appear animation.
+    var appearance: Int = 0
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
 
@@ -41,6 +43,11 @@ struct HUDView: View {
     var model: HUDModel
     var onTap: () -> Void
     var onCommand: () -> Void = {}
+    /// Transparent margin so the ripple can extend beyond the capsule.
+    static let outerPadding: CGFloat = 14
+    @State private var dropScale: CGFloat = 0.4
+    @State private var dropOpacity: Double = 0
+    @State private var ripple: CGFloat = 0
 
     static let freshGreen = Color(red: 0.24, green: 0.86, blue: 0.52)
     static let ink = Color(red: 0.03, green: 0.18, blue: 0.10)
@@ -97,6 +104,36 @@ struct HUDView: View {
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
         .fixedSize()
+        .scaleEffect(dropScale)
+        .opacity(dropOpacity)
+        .background {
+            // Water-drop ripple: two rings expanding outwards and fading.
+            ZStack {
+                Capsule().stroke(model.theme.background.opacity(0.55), lineWidth: 2)
+                    .scaleEffect(1 + ripple * 0.55).opacity(ripple == 0 ? 0 : (1 - ripple) * 0.8)
+                Capsule().stroke(model.theme.background.opacity(0.35), lineWidth: 1.5)
+                    .scaleEffect(1 + ripple * 0.3).opacity(ripple == 0 ? 0 : (1 - ripple) * 0.6)
+            }
+            .allowsHitTesting(false)
+        }
+        .padding(Self.outerPadding)
+        .onAppear(perform: playDropAnimation)
+        .onChange(of: model.appearance) { _, _ in playDropAnimation() }
+    }
+
+    private func playDropAnimation() {
+        dropScale = 0.4
+        dropOpacity = 0
+        ripple = 0
+        withAnimation(.interpolatingSpring(mass: 0.6, stiffness: 180, damping: 9, initialVelocity: 6)) {
+            dropScale = 1
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            dropOpacity = 1
+        }
+        withAnimation(.easeOut(duration: 0.75).delay(0.05)) {
+            ripple = 1
+        }
     }
 
     @ViewBuilder

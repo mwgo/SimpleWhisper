@@ -28,6 +28,10 @@ final class AppSettings {
     var hudTheme: HUDTheme {
         didSet { defaults.set(hudTheme.rawValue, forKey: "hudTheme") }
     }
+    /// Play a short sound when recording starts and stops.
+    var soundsEnabled: Bool {
+        didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") }
+    }
     /// Show the status text ("Recording", "Processing · …") next to the animation.
     var hudShowsText: Bool {
         didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
@@ -101,6 +105,7 @@ final class AppSettings {
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
+        soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false
