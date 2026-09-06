@@ -87,9 +87,11 @@ final class WhisperKitEngine: SpeechEngine {
             usePrefillPrompt: true,
             detectLanguage: languageCode == nil,
             skipSpecialTokens: true,
-            withoutTimestamps: true,
+            // Timestamps are required for recordings longer than one 30 s window: without them the
+            // decoder cannot advance the window and everything after 30 s is dropped.
+            withoutTimestamps: false,
             promptTokens: promptTokens,
-            chunkingStrategy: .vad
+            chunkingStrategy: .none
         )
         var results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
         var text = Self.joinedText(results)

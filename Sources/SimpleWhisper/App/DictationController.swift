@@ -393,6 +393,7 @@ final class DictationController: HotkeyMonitorDelegate {
             let macros = store.activeMacros(spokenPunctuation: settings.spokenPunctuationEnabled)
             let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
             try Task.checkCancellation()
+            DebugLog.write("Transcribed \(String(format: "%.1f", Double(samples.count) / AudioRecorder.targetFormat.sampleRate)) s → \(transcription.text.count) chars (\(transcription.detectedLanguage ?? "?"))")
 
             var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw DictationError.noSpeech }
