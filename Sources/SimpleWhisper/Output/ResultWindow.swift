@@ -21,8 +21,8 @@ final class ResultWindowController: NSObject, WKNavigationDelegate {
         modeControl?.isHidden = !isMarkdown
         modeControl?.selectedSegment = 0
         hint?.stringValue = isMarkdown
-            ? "No text field was active, so nothing was pasted. Rendered as Markdown; switch to Source to edit, Copy puts the source in the clipboard."
-            : "No text field was active, so nothing was pasted. Edit the text here and use Copy when you need it."
+            ? "Rendered as Markdown; switch to Source to edit. Copy puts the source in the clipboard."
+            : "Nothing was pasted. Edit the text here and use Copy when you need it."
         applyMode()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

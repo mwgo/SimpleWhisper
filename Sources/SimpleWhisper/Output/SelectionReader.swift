@@ -10,11 +10,13 @@ enum SelectionReader {
         if let text = accessibilitySelection(), !text.isEmpty {
             return text
         }
-        // Accessibility says the selection is empty: trust it. (⌘C would copy the whole line in VS Code.)
-        if let length = accessibilitySelectionLength(), length == 0 {
+        // Electron editors report a stale/empty Accessibility selection, so always try ⌘C.
+        guard let copied = await copySelection(in: app), !copied.isEmpty else { return nil }
+        // VS Code copies the whole line (with its trailing newline) when nothing is selected.
+        if accessibilitySelectionLength() == 0, copied.hasSuffix("\n"), copied.dropLast().contains("\n") == false {
             return nil
         }
-        return await copySelection(in: app)
+        return copied
     }
 
     private static func accessibilitySelectionLength() -> Int? {
@@ -62,34 +64,6 @@ enum SelectionReader {
         pasteboard.clearContents()
         if let saved { pasteboard.setString(saved, forType: .string) }
         return selection
-    }
-
-    /// Selects the text that was just pasted (it ends at the caret) so a paste replaces it: ⇧← once per
-    /// character, then verifies the selection. Setting the range via Accessibility is not used because
-    /// Chromium reports success but only moves the caret. Returns true when the selection matches `expected`.
-    static func selectBackwards(expected: String, in app: NSRunningApplication?) async -> Bool {
-        let length = expected.count
-        guard length > 0, length <= 3000 else { return false }
-        if let app, app != NSRunningApplication.current {
-            app.activate()
-            try? await Task.sleep(for: .milliseconds(120))
-        }
-        for index in 0..<length {
-            postKey(virtualKey: 123, flags: .maskShift) // ⇧←
-            if index % 40 == 39 { try? await Task.sleep(for: .milliseconds(15)) }
-        }
-        try? await Task.sleep(for: .milliseconds(150))
-        // Verify with ⌘C (Accessibility is stale in Electron editors right after keyboard selection).
-        let selected = await copySelection(in: app) ?? ""
-        let normalize: (String) -> String = {
-            $0.replacingOccurrences(of: "\r\n", with: "\n")
-                .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-        }
-        if normalize(selected) == normalize(expected) { return true }
-        // Wrong selection: collapse back to the original caret position (right end) and give up.
-        postKey(virtualKey: 124, flags: []) // →
-        try? await Task.sleep(for: .milliseconds(80))
-        return false
     }
 
     static func postKey(virtualKey: CGKeyCode, flags: CGEventFlags) {

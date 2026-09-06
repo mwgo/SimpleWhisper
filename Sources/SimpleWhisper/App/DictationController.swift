@@ -10,7 +10,7 @@ enum DictationError: LocalizedError {
         switch self {
         case .tooShort: return "Recording too short."
         case .noSpeech: return "No speech recognized."
-        case .noSelection: return "No text selected and nothing dictated yet."
+        case .noSelection: return "No text selected in the editor."
         }
     }
 }
@@ -223,20 +223,15 @@ final class DictationController: HotkeyMonitorDelegate {
             guard samples.count >= Int(AudioRecorder.targetFormat.sampleRate) / 3 else { throw DictationError.tooShort }
             var selection = await SelectionReader.selectedText(in: paster.targetApplication)
             try Task.checkCancellation()
-            // No selection: the command refers to the text that was just pasted; select it so the result replaces it.
-            var usesLastPaste = false
-            let normalize: (String) -> String = { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             // Some editors (VS Code) copy the whole line when nothing is selected; if that equals the
-            // last paste, treat it as "no selection" so the previous text gets replaced.
+            // last paste, treat it as "no selection".
+            let normalize: (String) -> String = { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             if let current = selection, !state.lastText.isEmpty, normalize(current) == normalize(state.lastText) {
                 selection = nil
             }
-            if selection?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
-                guard !state.lastText.isEmpty else { throw DictationError.noSelection }
-                selection = state.lastText
-                usesLastPaste = true
-            }
-            guard let selection else { throw DictationError.noSelection }
+            // No selection: treat the dictation as a direct question to the assistant, answer shown as Markdown.
+            let isAssistant = selection.map { normalize($0).isEmpty } ?? true
+            if isAssistant { selection = nil }
             hud.update(text: "Transcribing command…", stage: .transcribing)
             let engine = try await ensureEngine(settings.engineKind)
             try Task.checkCancellation()
@@ -246,25 +241,28 @@ final class DictationController: HotkeyMonitorDelegate {
             let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !instruction.isEmpty else { throw DictationError.noSpeech }
-            DebugLog.write("Command: \"\(instruction)\" on \(selection.count) chars")
+            DebugLog.write("Command: \"\(instruction)\" on \(selection?.count ?? 0) chars")
 
             let preview = instruction.count > 40 ? String(instruction.prefix(40)) + "…" : instruction
-            state.phase = .processing("Command")
-            hud.update(text: "Command", detail: preview, stage: .processing)
+            let label = isAssistant ? "Assistant" : "Command"
+            state.phase = .processing(label)
+            hud.update(text: label, detail: preview, stage: .processing)
             let ticker = Task { [weak self] in
                 var seconds = 0
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled else { return }
                     seconds += 1
-                    self?.hud.update(text: "Command", detail: "\(preview) · \(seconds)s", stage: .processing)
+                    self?.hud.update(text: label, detail: "\(preview) · \(seconds)s", stage: .processing)
                 }
             }
             defer { ticker.cancel() }
             let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand, allowWebAccess: settings.allowWebAccess)
             let result: String
-            do {
+            if let selection {
                 result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary, wantMarkdown: wantsMarkdown))
+            } else {
+                result = try await processor.process(text: instruction, instructions: AssistantComposer.instructions(vocabulary: store.vocabulary))
             }
             ticker.cancel()   // otherwise a late tick would re-show the HUD after hide()
             try Task.checkCancellation()
@@ -274,14 +272,11 @@ final class DictationController: HotkeyMonitorDelegate {
             state.phase = .idle
             recordHistory(HistoryEntry(date: Date(), kind: .command, text: result, instruction: instruction, language: transcription.detectedLanguage))
             hud.hide()
-            if usesLastPaste {
-                let selected = await SelectionReader.selectBackwards(expected: selection, in: paster.targetApplication)
-                DebugLog.write("Command: re-selected last paste (\(selection.count) chars) = \(selected)")
-                if !selected {
-                    hud.flash("Could not re-select the previous text; result appended", duration: .seconds(2.5))
-                }
+            if isAssistant {
+                resultWindow.show(text: result)
+            } else {
+                await deliver(result)
             }
-            await deliver(result)
             endActivity()
         } catch is CancellationError {
             if state.phase != .idle {

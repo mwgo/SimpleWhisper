@@ -108,3 +108,23 @@ enum CommandComposer {
         return lines.joined(separator: "\n")
     }
 }
+
+
+/// System instructions for "assistant mode": a dictated question with no selected text.
+enum AssistantComposer {
+    static func instructions(vocabulary: [VocabularyTerm]) -> String {
+        var lines: [String] = [
+            "You are a concise assistant. The user dictated a request (Polish or English, possibly with speech-recognition errors) and there is no selected text to edit.",
+            "Answer the request directly and helpfully.",
+            "",
+            "Rules:",
+            "- Reply in the language of the request unless asked otherwise.",
+            "- Format the answer as a well-structured Markdown document (headings, lists, tables, code blocks where they help). It will be displayed rendered.",
+            "- Be concise; no preamble like \"Sure\" or \"Here is\".",
+        ]
+        if !vocabulary.isEmpty {
+            lines.append("- Preserve these terms exactly: \(vocabulary.map(\.text).joined(separator: ", ")).")
+        }
+        return lines.joined(separator: "\n")
+    }
+}
