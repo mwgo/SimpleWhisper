@@ -75,6 +75,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     func startHotkey() {
         hotkey.delegate = self
+        hotkey.triggerKey = settings.hotkeyKey
         hotkey.holdThreshold = Double(settings.holdThresholdMs) / 1000
         hotkey.doublePressMode = settings.fnDoublePress
         hotkey.doublePressWindow = Double(settings.doublePressWindowMs) / 1000
@@ -109,6 +110,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     /// Applies hotkey-related settings without recreating the event tap.
     func applyHotkeySettings() {
+        hotkey.triggerKey = settings.hotkeyKey
         hotkey.holdThreshold = Double(settings.holdThresholdMs) / 1000
         hotkey.doublePressMode = settings.fnDoublePress
         hotkey.doublePressWindow = Double(settings.doublePressWindowMs) / 1000

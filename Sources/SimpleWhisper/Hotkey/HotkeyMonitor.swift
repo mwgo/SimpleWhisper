@@ -16,6 +16,61 @@ protocol HotkeyMonitorDelegate: AnyObject {
     func hotkeyCancelSilently()
 }
 
+/// Which modifier key starts dictation.
+enum HotkeyKey: String, CaseIterable, Codable, Identifiable {
+    case fn
+    case leftCommand
+    case rightCommand
+    case leftOption
+    case rightOption
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fn: return "🌐 fn (Globe)"
+        case .leftCommand: return "⌘ Left Command"
+        case .rightCommand: return "⌘ Right Command"
+        case .leftOption: return "⌥ Left Option"
+        case .rightOption: return "⌥ Right Option"
+        }
+    }
+
+    /// Short label used in the settings legend.
+    var symbol: String {
+        switch self {
+        case .fn: return "🌐 fn"
+        case .leftCommand: return "⌘ left"
+        case .rightCommand: return "⌘ right"
+        case .leftOption: return "⌥ left"
+        case .rightOption: return "⌥ right"
+        }
+    }
+
+    var keyCode: Int64 {
+        switch self {
+        case .fn: return 63
+        case .leftCommand: return 55
+        case .rightCommand: return 54
+        case .leftOption: return 58
+        case .rightOption: return 61
+        }
+    }
+
+    var flag: CGEventFlags {
+        switch self {
+        case .fn: return .maskSecondaryFn
+        case .leftCommand, .rightCommand: return .maskCommand
+        case .leftOption, .rightOption: return .maskAlternate
+        }
+    }
+
+    /// keyDown codes the key itself may emit (the Globe key also sends 179); never counted as "another key".
+    var ownKeyDownCodes: Set<Int64> {
+        self == .fn ? [63, 179] : [keyCode]
+    }
+}
+
 enum HotkeyError: LocalizedError {
     case tapCreationFailed
 
@@ -26,11 +81,11 @@ enum HotkeyError: LocalizedError {
 
 /// Global listener for the Globe/fn key (toggle or push-to-talk) and ESC (cancel).
 final class HotkeyMonitor {
-    private static let fnKeyCode: Int64 = 63
     private static let escapeKeyCode: Int64 = 53
     private static let controlKeyCodes: Set<Int64> = [59, 62]
-    /// The Globe key also emits its own keyDown (179) besides the flagsChanged event; never treat it as "another key".
-    private static let fnKeyDownCodes: Set<Int64> = [63, 179]
+
+    /// The key that starts dictation (fn by default; left/right Command or Option).
+    var triggerKey: HotkeyKey = .fn
 
     weak var delegate: HotkeyMonitorDelegate?
     var holdThreshold: TimeInterval = 0.4
@@ -92,8 +147,8 @@ final class HotkeyMonitor {
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         switch type {
-        case .flagsChanged where keyCode == Self.fnKeyCode:
-            if event.flags.contains(.maskSecondaryFn) {
+        case .flagsChanged where keyCode == triggerKey.keyCode:
+            if event.flags.contains(triggerKey.flag) {
                 fnPressed()
             } else {
                 fnReleased()
@@ -122,7 +177,7 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
-            } else if !Self.fnKeyDownCodes.contains(keyCode), fnDownAt != nil || recentlyStartedByFn {
+            } else if !triggerKey.ownKeyDownCodes.contains(keyCode), fnDownAt != nil || recentlyStartedByFn {
                 // fn+key (or a key right after a short fn press) is a keyboard shortcut, not dictation.
                 comboUsed = true
                 if recentlyStartedByFn {

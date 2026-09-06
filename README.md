@@ -7,7 +7,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
 
 ## Features
 
-- **Globe/fn key**: short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels, **Control** runs the recording as a command. Optional **double-press mode** (Settings › General › Hotkey): two quick presses toggle, press-release-hold is push-to-talk, a single press does nothing.
+- **Globe/fn key** (or left/right Command, left/right Option, Settings › General › Hotkey): short press toggles dictation, hold (> 0.4 s) for push-to-talk. **Esc** cancels, **Control** runs the recording as a command. Optional **double-press mode** (Settings › General › Hotkey): two quick presses toggle, press-release-hold is push-to-talk, a single press does nothing.
 - **No text field active?** The result opens in a window instead: rendered as Markdown when it looks like
   Markdown (with a Source view to edit), plain editable text otherwise. AI prompts/commands are then asked
   for Markdown output (Settings › AI).

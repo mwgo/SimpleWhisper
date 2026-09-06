@@ -43,6 +43,10 @@ final class AppSettings {
     var holdThresholdMs: Int {
         didSet { defaults.set(holdThresholdMs, forKey: "holdThresholdMs") }
     }
+    /// Modifier key that starts dictation.
+    var hotkeyKey: HotkeyKey {
+        didSet { defaults.set(hotkeyKey.rawValue, forKey: "hotkeyKey") }
+    }
     /// Require a double fn press (quick = toggle, second press held = push-to-talk).
     var fnDoublePress: Bool {
         didSet { defaults.set(fnDoublePress, forKey: "fnDoublePress") }
@@ -100,6 +104,7 @@ final class AppSettings {
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false
+        hotkeyKey = HotkeyKey(rawValue: defaults.string(forKey: "hotkeyKey") ?? "") ?? .fn
         doublePressWindowMs = defaults.object(forKey: "doublePressWindowMs") as? Int ?? 400
         // Templates created before the {tools} placeholder existed get it added.
         defaultShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand)

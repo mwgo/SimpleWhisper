@@ -71,14 +71,22 @@ struct GeneralSettingsView: View {
                 }
             }
             Section("Hotkey") {
-                HotkeyLegend(doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled)
+                Picker("Dictation key", selection: Binding(get: { settings.hotkeyKey }, set: { settings.hotkeyKey = $0; controller.applyHotkeySettings() })) {
+                    ForEach(HotkeyKey.allCases) { key in Text(key.title).tag(key) }
+                }
+                HotkeyLegend(key: settings.hotkeyKey, doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled)
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.applyHotkeySettings() }), in: 200...1000, step: 50)
-                Toggle("Require a double fn press", isOn: Binding(get: { settings.fnDoublePress }, set: { settings.fnDoublePress = $0; controller.applyHotkeySettings() }))
+                Toggle("Require a double press", isOn: Binding(get: { settings.fnDoublePress }, set: { settings.fnDoublePress = $0; controller.applyHotkeySettings() }))
                 if settings.fnDoublePress {
                     Stepper("Double-press window: \(settings.doublePressWindowMs) ms", value: Binding(get: { settings.doublePressWindowMs }, set: { settings.doublePressWindowMs = $0; controller.applyHotkeySettings() }), in: 200...800, step: 50)
                 }
-                Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if settings.hotkeyKey == .fn {
+                    Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Shortcuts with this modifier (e.g. ⌘C) keep working: a second key pressed while it is held cancels the recording silently.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("HUD") {
                 Picker("Position", selection: Binding(get: { settings.hudPlacement }, set: { settings.hudPlacement = $0 })) {
@@ -175,24 +183,26 @@ struct GeneralSettingsView: View {
 
 /// Readable summary of the keyboard controls, adapting to the double-press setting.
 struct HotkeyLegend: View {
+    var key: HotkeyKey
     var doublePress: Bool
     var commandMode: Bool
 
     var body: some View {
+        let k = key.symbol
         VStack(alignment: .leading, spacing: 6) {
             if doublePress {
-                row("🌐 fn  ×2", "two quick presses start dictation, one press stops it")
-                row("🌐 fn, then 🌐 fn (hold)", "push-to-talk: release the second press to stop")
-                row("🌐 fn  ×1", "does nothing, so accidental taps never record")
+                row("\(k)  ×2", "two quick presses start dictation, one press stops it")
+                row("\(k), then \(k) (hold)", "push-to-talk: release the second press to stop")
+                row("\(k)  ×1", "does nothing, so accidental taps never record")
             } else {
-                row("🌐 fn (tap)", "start / stop dictation")
-                row("🌐 fn (hold)", "push-to-talk: release to stop")
+                row("\(k) (tap)", "start / stop dictation")
+                row("\(k) (hold)", "push-to-talk: release to stop")
             }
             row("esc", "cancel recording or processing")
             if commandMode {
                 row("⌃ control", "while recording: run the dictation as a command")
             }
-            row("🌐 fn + any key", "keyboard shortcut (e.g. fn+F12): recording is cancelled silently")
+            row("\(k) + any key", "keyboard shortcut: recording is cancelled silently")
         }
         .padding(.vertical, 2)
     }
