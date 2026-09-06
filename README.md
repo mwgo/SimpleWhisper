@@ -37,8 +37,9 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   dictations and commands (date + wrapped text). Clicking a card copies it to the clipboard; ▶ pastes it into the active editor.
 - **Prompt shortcuts**: each prompt can have a letter; press it while recording to use that prompt for the
   dictation, press Space for plain text.
-- **Prompts**: named AI prompts (Clean up, Formal email, …) run through `claude -p` or Apple
-  Intelligence. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
+- **Prompts**: named AI prompts (Clean up, Formal email, …) run through Claude Code CLI (`claude -p`), Codex CLI, Gemini CLI, Agy, a custom shell
+  command, the Claude API, the OpenAI API, the Google Gemini API (keys in the Keychain) or Apple
+  Intelligence. Settings › AI has two parts: prompts and command mode/assistant, each with its own provider. Clipboard/macro content is protected by placeholders so the AI never rewrites it.
 
 ## Build & run
 

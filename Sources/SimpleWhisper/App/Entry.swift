@@ -137,7 +137,7 @@ enum DebugCLI {
             if let selection = value("--selection") {
                 let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary).trimmingCharacters(in: .whitespacesAndNewlines)
                 let settings = AppSettings()
-                let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand, allowWebAccess: settings.allowWebAccess)
+                let processor = AIProviderFactory.makeProcessor(provider: settings.commandProvider, shellTemplate: "", settings: settings, context: .command)
                 let aiStarted = Date()
                 let result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary))
                 print("Command \"\(instruction)\" in \(String(format: "%.1f", Date().timeIntervalSince(aiStarted))) s")
@@ -156,9 +156,7 @@ enum DebugCLI {
                     return 2
                 }
                 let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: !expansion.usedMacroIDs.isEmpty)
-                let processor: TextProcessor = prompt.provider == .shell
-                    ? ShellCommandProcessor(commandTemplate: prompt.shellCommand, allowWebAccess: AppSettings().allowWebAccess)
-                    : FoundationModelsProcessor()
+                let processor = AIProviderFactory.makeProcessor(provider: prompt.provider, shellTemplate: prompt.shellCommand, settings: AppSettings(), context: .prompt)
                 let aiStarted = Date()
                 text = try await processor.process(text: text, instructions: instructions)
                 print("AI (\(prompt.name), \(prompt.provider.rawValue)) in \(String(format: "%.1f", Date().timeIntervalSince(aiStarted))) s")

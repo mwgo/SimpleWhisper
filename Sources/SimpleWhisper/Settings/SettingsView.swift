@@ -23,7 +23,7 @@ struct SettingsView: View {
             MacrosSettingsView(store: controller.store, settings: controller.settings)
                 .tabItem { Label("Macros", systemImage: "wand.and.stars") }
                 .tag("macros")
-            AISettingsView(settings: controller.settings)
+            AISettingsView(settings: controller.settings, store: controller.store)
                 .tabItem { Label("AI", systemImage: "sparkles") }
                 .tag("ai")
             AboutView()
@@ -378,7 +378,7 @@ struct PromptsSettingsView: View {
                 Divider()
                 listToolbar(
                     add: {
-                        let prompt = NamedPrompt(name: "New prompt", instructions: "", shellCommand: settings.defaultShellCommand)
+                        let prompt = NamedPrompt(name: "New prompt", instructions: "", provider: settings.promptProvider, shellCommand: settings.defaultShellCommand)
                         store.prompts.append(prompt)
                         selection = prompt.id
                     },
@@ -434,9 +434,12 @@ struct PromptEditor: View {
             Picker("Provider", selection: $prompt.provider) {
                 ForEach(PromptProvider.allCases) { provider in Text(provider.title).tag(provider) }
             }
+            if prompt.provider == .claudeCode {
+                Text("Uses the Claude Code command from Settings › AI › Prompts.").font(.caption).foregroundStyle(.secondary)
+            }
             if prompt.provider == .shell {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Command")
+                    Text("Command (custom shell command)")
                     TextField("", text: $prompt.shellCommand, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .labelsHidden()
@@ -654,42 +657,117 @@ struct MacrosSettingsView: View {
 
 struct AISettingsView: View {
     var settings: AppSettings
+    var store: DataStore
 
     var body: some View {
         Form {
-            Section("Apple Intelligence (on-device)") {
-                LabeledContent("Status", value: FoundationModelsProcessor.availabilityDescription)
-                Text("Free, private, no network. Requires Apple Intelligence enabled in System Settings.")
+            // ---- Part 1: prompts ----
+            Section {
+                Picker("Default provider for new prompts", selection: Binding(get: { settings.promptProvider }, set: { settings.promptProvider = $0 })) {
+                    ForEach(PromptProvider.allCases) { provider in Text(provider.title).tag(provider) }
+                }
+                ProviderConfigView(provider: settings.promptProvider, context: .prompt, settings: settings)
+                Text("Prompts post-process a dictation (Clean up, Translate…). Each prompt keeps its own provider in the Prompts tab; this is the default for new ones. Prompts never get web access.")
                     .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Prompts")
             }
-            Section("Shell command (default for new prompts)") {
-                TextField("Command", text: Binding(get: { settings.defaultShellCommand }, set: { settings.defaultShellCommand = $0 }), axis: .vertical)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1...3)
-                Text("Runs in /bin/zsh -lc. The dictated text is piped to stdin, {prompt} is replaced with the prompt instructions (quoted), {tools} with the tool flags from the Tools section, stdout is used as the result.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Reset to default") { settings.defaultShellCommand = NamedPrompt.defaultShellCommand }
-            }
-            Section("Tools") {
-                Toggle("Allow Claude to use the web (WebFetch, WebSearch)", isOn: Binding(get: { settings.allowWebAccess }, set: { settings.allowWebAccess = $0 }))
-                Text("In print mode Claude cannot ask for permissions, so tools are off by default ({tools} → --tools \"\"): faster, and the model cannot read local files. When on, {tools} becomes --tools WebFetch WebSearch --allowedTools WebFetch WebSearch, so prompts and commands may look things up online (slower).")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Result window") {
+
+            // ---- Part 2: command mode & assistant ----
+            Section {
+                Picker("Provider", selection: Binding(get: { settings.commandProvider }, set: { settings.commandProvider = $0 })) {
+                    ForEach(PromptProvider.allCases) { provider in Text(provider.title).tag(provider) }
+                }
+                ProviderConfigView(provider: settings.commandProvider, context: .command, settings: settings)
+                if settings.commandProvider == .claudeCode {
+                    Toggle("Allow Claude Code to use the web (WebFetch, WebSearch)", isOn: Binding(get: { settings.allowWebAccess }, set: { settings.allowWebAccess = $0 }))
+                    Text("In print mode Claude cannot ask for permissions, so tools are off ({tools} → --tools \"\"). When on, {tools} allows WebFetch and WebSearch, so commands and questions may look things up online (slower).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("Ask for Markdown when the result cannot be pasted", isOn: Binding(get: { settings.markdownWhenNotPasting }, set: { settings.markdownWhenNotPasting = $0 }))
-                Text("When no text field is active at the start of dictation, the result is shown in a window instead of being pasted. With this on, prompts and commands ask the AI for Markdown, and the window renders it (switch to Source to edit).")
+                Text("Press ▶ or Control while recording: the dictated instruction is applied to the selected text, or answered as a question when nothing is selected (the answer opens as a Markdown document). When no text field is active, the result window is used instead of pasting; with this on, the AI is asked for Markdown, which the window renders.")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Command mode command") {
-                TextField("Command", text: Binding(get: { settings.commandShellCommand }, set: { settings.commandShellCommand = $0 }), axis: .vertical)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1...3)
-                Text("Used when you press ▶ in the HUD to apply a dictated instruction to selected text. Editing real text deserves a stronger model, so the default uses --model opus (slower than haiku).")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Reset to default") { settings.commandShellCommand = NamedPrompt.defaultCommandShellCommand }
+            } header: {
+                Text("Command mode & assistant")
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Settings for one provider, shown under the picker that selected it.
+struct ProviderConfigView: View {
+    var provider: PromptProvider
+    var context: AIProviderFactory.Context
+    var settings: AppSettings
+    @State private var openAIKey = KeychainStore.get(AIProviderFactory.openAIKeyAccount) ?? ""
+    @State private var geminiKey = KeychainStore.get(AIProviderFactory.geminiKeyAccount) ?? ""
+    @State private var claudeKey = KeychainStore.get(AIProviderFactory.claudeKeyAccount) ?? ""
+
+    var body: some View {
+        switch provider {
+        case .claudeCode:
+            if context == .command {
+                commandField(Binding(get: { settings.claudeCodeCommandCommand }, set: { settings.claudeCodeCommandCommand = $0 }), reset: { settings.claudeCodeCommandCommand = NamedPrompt.defaultClaudeCodeCommandCommand })
+                Text("Editing real text deserves a stronger model, so the default uses --model opus. The text is piped to stdin, {prompt} carries the instructions, {tools} the tool flags.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                commandField(Binding(get: { settings.claudeCodePromptCommand }, set: { settings.claudeCodePromptCommand = $0 }), reset: { settings.claudeCodePromptCommand = NamedPrompt.defaultClaudeCodePromptCommand })
+                Text("Fast --model haiku by default (about 4 s per dictation). Requires the claude CLI installed and logged in.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .shell:
+            if context == .command {
+                commandField(Binding(get: { settings.commandShellCommand }, set: { settings.commandShellCommand = $0 }), reset: { settings.commandShellCommand = NamedPrompt.defaultCommandShellCommand })
+            } else {
+                commandField(Binding(get: { settings.defaultShellCommand }, set: { settings.defaultShellCommand = $0 }), reset: { settings.defaultShellCommand = NamedPrompt.defaultShellCommand })
+            }
+            Text("Any program run in /bin/zsh -lc: the text is piped to stdin (or inlined with {text}), {prompt} receives the instructions quoted, stdout becomes the result.")
+                .font(.caption).foregroundStyle(.secondary)
+        case .codex:
+            commandField(Binding(get: { settings.codexCommand }, set: { settings.codexCommand = $0 }), reset: { settings.codexCommand = NamedPrompt.defaultCodexCommand })
+            Text("The text is piped to stdin. Requires the codex CLI installed and logged in.").font(.caption).foregroundStyle(.secondary)
+        case .geminiCLI:
+            commandField(Binding(get: { settings.geminiCLICommand }, set: { settings.geminiCLICommand = $0 }), reset: { settings.geminiCLICommand = NamedPrompt.defaultGeminiCLICommand })
+            Text("The text is piped to stdin. Needs a working login or GEMINI_API_KEY in the shell environment.").font(.caption).foregroundStyle(.secondary)
+        case .agy:
+            commandField(Binding(get: { settings.agyCommand }, set: { settings.agyCommand = $0 }), reset: { settings.agyCommand = NamedPrompt.defaultAgyCommand })
+            Text("Agy does not read stdin in print mode, so {text} inlines the text after the instructions.").font(.caption).foregroundStyle(.secondary)
+        case .claudeAPI:
+            SecureField("API key", text: $claudeKey)
+                .onChange(of: claudeKey) { _, value in KeychainStore.set(value.trimmingCharacters(in: .whitespacesAndNewlines), for: AIProviderFactory.claudeKeyAccount) }
+            TextField("Model", text: Binding(get: { settings.claudeModel }, set: { settings.claudeModel = $0 }))
+            Text("Anthropic Messages API with server-side refusal fallbacks. Key from console.anthropic.com, stored in the Keychain. Models: claude-opus-5, claude-sonnet-5, claude-haiku-4-5.")
+                .font(.caption).foregroundStyle(.secondary)
+        case .openAI:
+            SecureField("API key", text: $openAIKey)
+                .onChange(of: openAIKey) { _, value in KeychainStore.set(value.trimmingCharacters(in: .whitespacesAndNewlines), for: AIProviderFactory.openAIKeyAccount) }
+            TextField("Model", text: Binding(get: { settings.openAIModel }, set: { settings.openAIModel = $0 }))
+            Text("Chat Completions API. The key is stored in the Keychain.").font(.caption).foregroundStyle(.secondary)
+        case .gemini:
+            SecureField("API key", text: $geminiKey)
+                .onChange(of: geminiKey) { _, value in KeychainStore.set(value.trimmingCharacters(in: .whitespacesAndNewlines), for: AIProviderFactory.geminiKeyAccount) }
+            TextField("Model", text: Binding(get: { settings.geminiModel }, set: { settings.geminiModel = $0 }))
+            Text("generateContent API (AI Studio key). The key is stored in the Keychain.").font(.caption).foregroundStyle(.secondary)
+        case .appleFoundationModels:
+            LabeledContent("Status", value: FoundationModelsProcessor.availabilityDescription)
+            Text("Free, private, no network. Requires Apple Intelligence enabled in System Settings. Does not support Polish text.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func commandField(_ binding: Binding<String>, reset: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Command").font(.headline)
+                Spacer()
+                Button("Reset", action: reset).controlSize(.small)
+            }
+            TextField("", text: binding, prompt: Text("Command"), axis: .vertical)
+                .labelsHidden()
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1...3)
+        }
     }
 }
 

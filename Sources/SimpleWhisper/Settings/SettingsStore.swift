@@ -69,6 +69,38 @@ final class AppSettings {
     var markdownWhenNotPasting: Bool {
         didSet { defaults.set(markdownWhenNotPasting, forKey: "markdownWhenNotPasting") }
     }
+    /// Default provider for new prompts (each prompt keeps its own choice).
+    var promptProvider: PromptProvider {
+        didSet { defaults.set(promptProvider.rawValue, forKey: "promptProvider") }
+    }
+    var claudeCodePromptCommand: String {
+        didSet { defaults.set(claudeCodePromptCommand, forKey: "claudeCodePromptCommand") }
+    }
+    var claudeCodeCommandCommand: String {
+        didSet { defaults.set(claudeCodeCommandCommand, forKey: "claudeCodeCommandCommand") }
+    }
+    var codexCommand: String {
+        didSet { defaults.set(codexCommand, forKey: "codexCommand") }
+    }
+    var geminiCLICommand: String {
+        didSet { defaults.set(geminiCLICommand, forKey: "geminiCLICommand") }
+    }
+    var agyCommand: String {
+        didSet { defaults.set(agyCommand, forKey: "agyCommand") }
+    }
+    var claudeModel: String {
+        didSet { defaults.set(claudeModel, forKey: "claudeModel") }
+    }
+    var openAIModel: String {
+        didSet { defaults.set(openAIModel, forKey: "openAIModel") }
+    }
+    var geminiModel: String {
+        didSet { defaults.set(geminiModel, forKey: "geminiModel") }
+    }
+    /// Provider used by command mode and the assistant (no-selection) mode.
+    var commandProvider: PromptProvider {
+        didSet { defaults.set(commandProvider.rawValue, forKey: "commandProvider") }
+    }
     /// Shell command used by command mode (instruction applied to selected text).
     var commandShellCommand: String {
         didSet { defaults.set(commandShellCommand, forKey: "commandShellCommand") }
@@ -114,9 +146,36 @@ final class AppSettings {
         // Templates created before the {tools} placeholder existed get it added.
         defaultShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand)
         commandShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand)
+        promptProvider = PromptProvider(rawValue: defaults.string(forKey: "promptProvider") ?? "") ?? .claudeCode
+        claudeCodePromptCommand = defaults.string(forKey: "claudeCodePromptCommand") ?? NamedPrompt.defaultClaudeCodePromptCommand
+        claudeCodeCommandCommand = defaults.string(forKey: "claudeCodeCommandCommand") ?? NamedPrompt.defaultClaudeCodeCommandCommand
+        codexCommand = defaults.string(forKey: "codexCommand") ?? NamedPrompt.defaultCodexCommand
+        geminiCLICommand = defaults.string(forKey: "geminiCLICommand") ?? NamedPrompt.defaultGeminiCLICommand
+        agyCommand = defaults.string(forKey: "agyCommand") ?? NamedPrompt.defaultAgyCommand
+        claudeModel = defaults.string(forKey: "claudeModel") ?? "claude-opus-5"
+        openAIModel = defaults.string(forKey: "openAIModel") ?? "gpt-4o-mini"
+        geminiModel = defaults.string(forKey: "geminiModel") ?? "gemini-2.5-flash"
+        commandProvider = PromptProvider(rawValue: defaults.string(forKey: "commandProvider") ?? "") ?? .claudeCode
         markdownWhenNotPasting = defaults.object(forKey: "markdownWhenNotPasting") as? Bool ?? true
         allowWebAccess = defaults.object(forKey: "allowWebAccess") as? Bool ?? false
         selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
+
+        // Before the Claude Code provider existed, "shell" with a claude template meant Claude Code.
+        // (didSet does not run inside init, so persist the migrated values explicitly.)
+        if commandProvider == .shell, commandShellCommand.hasPrefix("claude ") {
+            claudeCodeCommandCommand = commandShellCommand
+            commandShellCommand = NamedPrompt.defaultCommandShellCommand
+            commandProvider = .claudeCode
+            defaults.set(claudeCodeCommandCommand, forKey: "claudeCodeCommandCommand")
+            defaults.set(commandShellCommand, forKey: "commandShellCommand")
+            defaults.set(commandProvider.rawValue, forKey: "commandProvider")
+        }
+        if defaultShellCommand.hasPrefix("claude ") {
+            claudeCodePromptCommand = defaultShellCommand
+            defaultShellCommand = NamedPrompt.defaultShellCommand
+            defaults.set(claudeCodePromptCommand, forKey: "claudeCodePromptCommand")
+            defaults.set(defaultShellCommand, forKey: "defaultShellCommand")
+        }
     }
 }
 
@@ -159,6 +218,18 @@ final class DataStore {
         history = Self.load("history.json") ?? []
         seedPunctuationMacrosIfNeeded()
         migratePromptTools()
+        migrateClaudeCodePrompts()
+    }
+
+    /// Prompts saved as "shell" with a claude template become "Claude Code" prompts.
+    private func migrateClaudeCodePrompts() {
+        var updated = prompts
+        var changed = false
+        for index in updated.indices where updated[index].provider == .shell && updated[index].shellCommand.hasPrefix("claude ") {
+            updated[index].provider = .claudeCode
+            changed = true
+        }
+        if changed { prompts = updated }
     }
 
     private func migratePromptTools() {

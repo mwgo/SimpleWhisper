@@ -295,7 +295,7 @@ final class DictationController: HotkeyMonitorDelegate {
                 }
             }
             defer { ticker.cancel() }
-            let processor = ShellCommandProcessor(commandTemplate: settings.commandShellCommand, allowWebAccess: settings.allowWebAccess)
+            let processor = AIProviderFactory.makeProcessor(provider: settings.commandProvider, shellTemplate: "", settings: settings, context: .command)
             let result: String
             if let selection {
                 result = try await processor.process(text: selection, instructions: CommandComposer.instructions(spoken: instruction, vocabulary: store.vocabulary, wantMarkdown: wantsMarkdown))
@@ -477,13 +477,7 @@ final class DictationController: HotkeyMonitorDelegate {
     }
 
     private func makeProcessor(for prompt: NamedPrompt) -> TextProcessor {
-        switch prompt.provider {
-        case .appleFoundationModels:
-            return FoundationModelsProcessor()
-        case .shell:
-            let template = prompt.shellCommand.trimmingCharacters(in: .whitespaces)
-            return ShellCommandProcessor(commandTemplate: template.isEmpty ? settings.defaultShellCommand : template, allowWebAccess: settings.allowWebAccess)
-        }
+        AIProviderFactory.makeProcessor(provider: prompt.provider, shellTemplate: prompt.shellCommand, settings: settings, context: .prompt)
     }
 
     private func showError(_ message: String) {

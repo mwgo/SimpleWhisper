@@ -51,14 +51,18 @@ final class ShellCommandProcessor: TextProcessor {
     }
 
     func process(text: String, instructions: String) async throws -> String {
+        // {text} inlines the text as an argument (for CLIs that ignore stdin); otherwise it is piped to stdin.
+        let inlinesText = commandTemplate.contains("{text}")
         let command = commandTemplate
             .replacingOccurrences(of: "{prompt}", with: "\"$SW_PROMPT\"")
+            .replacingOccurrences(of: "{text}", with: "\"$SW_TEXT\"")
             .replacingOccurrences(of: "{tools}", with: allowWebAccess ? Self.webToolsFlags : Self.noToolsFlags)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-lc", command]
         var environment = ProcessInfo.processInfo.environment
         environment["SW_PROMPT"] = instructions
+        environment["SW_TEXT"] = text
         environment["PATH"] = (environment["PATH"] ?? "") + ":\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin"
         process.environment = environment
 

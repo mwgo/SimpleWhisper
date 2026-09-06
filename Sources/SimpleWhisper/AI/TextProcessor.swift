@@ -21,35 +21,59 @@ protocol TextProcessor {
 }
 
 enum PromptProvider: String, Codable, CaseIterable, Identifiable {
-    case appleFoundationModels
+    case claudeCode
+    case codex
+    case geminiCLI
+    case agy
     case shell
+    case claudeAPI
+    case openAI
+    case gemini
+    case appleFoundationModels
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .appleFoundationModels: return "Apple Intelligence (on-device, no Polish)"
-        case .shell: return "Shell command (e.g. claude -p)"
+        case .claudeCode: return "Claude Code CLI (claude -p)"
+        case .shell: return "Custom shell command"
+        case .codex: return "OpenAI Codex CLI (codex exec)"
+        case .geminiCLI: return "Gemini CLI (gemini -p)"
+        case .agy: return "Agy CLI (agy -p)"
+        case .claudeAPI: return "Claude API (Anthropic)"
+        case .openAI: return "OpenAI API"
+        case .gemini: return "Google Gemini API"
         }
     }
+
+    /// CLI providers run through ShellCommandProcessor with a per-provider template from settings.
+    var isCLI: Bool { self == .claudeCode || self == .shell || self == .codex || self == .geminiCLI || self == .agy }
 }
 
 struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
     var id: UUID = UUID()
     var name: String
     var instructions: String
-    var provider: PromptProvider = .shell
+    var provider: PromptProvider = .claudeCode
     /// Shell template. `{prompt}` (or `$SW_PROMPT`) receives the instructions, `{tools}` the tool flags
     /// (none, or web tools when allowed in Settings › AI); the text arrives on stdin.
     var shellCommand: String = NamedPrompt.defaultShellCommand
     /// Single letter/digit pressed while recording to select this prompt for the dictation.
     var shortcut: String = ""
 
-    static let defaultShellCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
-    /// Command mode edits real text, so it defaults to a stronger (slower) model.
-    static let defaultCommandShellCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
+    /// Claude Code CLI templates: fast model for prompts, strong model for command mode.
+    static let defaultClaudeCodePromptCommand = "claude -p --no-session-persistence --model haiku --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
+    static let defaultClaudeCodeCommandCommand = "claude -p --no-session-persistence --model opus --setting-sources \"\" --disable-slash-commands {tools} --system-prompt {prompt}"
+    /// Custom shell command example: any tool that reads the text from stdin and prints the result.
+    static let defaultShellCommand = "my-tool --instructions {prompt}"
+    static let defaultCodexCommand = "codex exec --ephemeral --skip-git-repo-check -s read-only --color never {prompt}"
+    static let defaultGeminiCLICommand = "gemini -p {prompt} --approval-mode plan"
+    /// Agy does not read stdin in print mode, so the text is inlined after the instructions.
+    static let defaultAgyCommand = "agy -p {prompt}$'\\n\\n'{text} --disable-slash-commands"
+    static let defaultCommandShellCommand = defaultShellCommand
 
-    init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .shell, shellCommand: String = NamedPrompt.defaultShellCommand, shortcut: String = "") {
+    init(id: UUID = UUID(), name: String, instructions: String, provider: PromptProvider = .claudeCode, shellCommand: String = NamedPrompt.defaultShellCommand, shortcut: String = "") {
         self.id = id
         self.name = name
         self.instructions = instructions
@@ -65,7 +89,7 @@ struct NamedPrompt: Codable, Identifiable, Equatable, Hashable {
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         instructions = try c.decode(String.self, forKey: .instructions)
-        provider = try c.decodeIfPresent(PromptProvider.self, forKey: .provider) ?? .shell
+        provider = try c.decodeIfPresent(PromptProvider.self, forKey: .provider) ?? .claudeCode
         shellCommand = try c.decodeIfPresent(String.self, forKey: .shellCommand) ?? NamedPrompt.defaultShellCommand
         shortcut = try c.decodeIfPresent(String.self, forKey: .shortcut) ?? ""
     }
