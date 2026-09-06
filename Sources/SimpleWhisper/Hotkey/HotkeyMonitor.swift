@@ -12,6 +12,8 @@ protocol HotkeyMonitorDelegate: AnyObject {
     func hotkeyCancel()
     /// Control pressed while recording: finish and run the dictation as a command. Returns true if handled.
     func hotkeyRunCommand() -> Bool
+    /// Another key was pressed right after fn started a recording: it was a shortcut (fn+F12…), not dictation.
+    func hotkeyCancelSilently()
 }
 
 enum HotkeyError: LocalizedError {
@@ -30,6 +32,9 @@ final class HotkeyMonitor {
 
     weak var delegate: HotkeyMonitorDelegate?
     var holdThreshold: TimeInterval = 0.4
+    /// Any key within this window after fn started recording cancels it silently.
+    var shortcutGrace: TimeInterval = 1.0
+    private var recordingStartedByFnAt: Date?
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -109,13 +114,25 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
-            } else if fnDownAt != nil {
+            } else if fnDownAt != nil || recentlyStartedByFn {
+                // fn+key (or a key right after a short fn press) is a keyboard shortcut, not dictation.
                 comboUsed = true
+                if recentlyStartedByFn {
+                    recordingStartedByFnAt = nil
+                    pushToTalkActive = false
+                    cancelHold()
+                    MainActor.assumeIsolated { delegate?.hotkeyCancelSilently() }
+                }
             }
         default:
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    private var recentlyStartedByFn: Bool {
+        guard let started = recordingStartedByFnAt else { return false }
+        return Date().timeIntervalSince(started) < shortcutGrace
     }
 
     private func fnPressed() {
@@ -126,6 +143,7 @@ final class HotkeyMonitor {
         holdTimer = Timer.scheduledTimer(withTimeInterval: holdThreshold, repeats: false) { [weak self] _ in
             guard let self, self.fnDownAt != nil, !self.comboUsed else { return }
             self.pushToTalkActive = true
+            self.recordingStartedByFnAt = Date()
             MainActor.assumeIsolated { self.delegate?.hotkeyPushToTalkStart() }
         }
     }
@@ -139,7 +157,13 @@ final class HotkeyMonitor {
         if pushToTalkActive {
             MainActor.assumeIsolated { delegate?.hotkeyPushToTalkStop() }
         } else if Date().timeIntervalSince(downAt) < holdThreshold {
-            MainActor.assumeIsolated { delegate?.hotkeyToggle() }
+            var started = false
+            MainActor.assumeIsolated {
+                let wasIdle = !(delegate?.isDictationActive ?? false)
+                delegate?.hotkeyToggle()
+                started = wasIdle
+            }
+            recordingStartedByFnAt = started ? Date() : nil
         }
     }
 

@@ -71,7 +71,7 @@ struct GeneralSettingsView: View {
                 }
             }
             Section("Hotkey") {
-                Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels. Control while recording runs the dictation as a command (if command mode is on).")
+                Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels. Control while recording runs the dictation as a command (if command mode is on). Any other key within a second of fn cancels the recording silently, so fn+F12 and similar shortcuts keep working.")
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.startHotkey() }), in: 200...1000, step: 50)
                 Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
                     .font(.caption).foregroundStyle(.secondary)

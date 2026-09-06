@@ -162,6 +162,16 @@ final class DictationController: HotkeyMonitorDelegate {
         cancel()
     }
 
+    func hotkeyCancelSilently() {
+        guard state.phase == .recording else { return }
+        _ = recorder.stop()
+        pipelineTask = nil
+        state.phase = .idle
+        endActivity()
+        hud.hide()
+        DebugLog.write("Recording cancelled silently (key pressed right after fn)")
+    }
+
     func hotkeyRunCommand() -> Bool {
         guard state.phase == .recording, settings.commandModeEnabled else { return false }
         stopAndRunCommand()
