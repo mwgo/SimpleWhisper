@@ -71,8 +71,12 @@ struct GeneralSettingsView: View {
                 }
             }
             Section("Hotkey") {
-                Text("Globe/fn: short press toggles dictation, hold for push-to-talk. Escape cancels. Control while recording runs the dictation as a command (if command mode is on). Any other key within a second of fn cancels the recording silently, so fn+F12 and similar shortcuts keep working.")
-                Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.startHotkey() }), in: 200...1000, step: 50)
+                HotkeyLegend(doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled)
+                Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.applyHotkeySettings() }), in: 200...1000, step: 50)
+                Toggle("Require a double fn press", isOn: Binding(get: { settings.fnDoublePress }, set: { settings.fnDoublePress = $0; controller.applyHotkeySettings() }))
+                if settings.fnDoublePress {
+                    Stepper("Double-press window: \(settings.doublePressWindowMs) ms", value: Binding(get: { settings.doublePressWindowMs }, set: { settings.doublePressWindowMs = $0; controller.applyHotkeySettings() }), in: 200...800, step: 50)
+                }
                 Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -163,6 +167,40 @@ struct GeneralSettingsView: View {
             if !granted {
                 Button("Grant…", action: action)
             }
+        }
+    }
+}
+
+// MARK: - Hotkey legend
+
+/// Readable summary of the keyboard controls, adapting to the double-press setting.
+struct HotkeyLegend: View {
+    var doublePress: Bool
+    var commandMode: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if doublePress {
+                row("🌐 fn  ×2", "two quick presses start dictation, one press stops it")
+                row("🌐 fn, then 🌐 fn (hold)", "push-to-talk: release the second press to stop")
+                row("🌐 fn  ×1", "does nothing, so accidental taps never record")
+            } else {
+                row("🌐 fn (tap)", "start / stop dictation")
+                row("🌐 fn (hold)", "push-to-talk: release to stop")
+            }
+            row("esc", "cancel recording or processing")
+            if commandMode {
+                row("⌃ control", "while recording: run the dictation as a command")
+            }
+            row("🌐 fn + any key", "keyboard shortcut (e.g. fn+F12): recording is cancelled silently")
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func row(_ keys: String, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(keys).font(.system(.body, design: .rounded).weight(.semibold)).frame(width: 210, alignment: .leading)
+            Text(text).foregroundStyle(.secondary)
         }
     }
 }

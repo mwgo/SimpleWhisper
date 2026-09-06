@@ -37,6 +37,12 @@ final class HotkeyMonitor {
     /// Any key within this window after fn started recording cancels it silently.
     var shortcutGrace: TimeInterval = 1.0
     private var recordingStartedByFnAt: Date?
+    /// Double-press mode: a single fn press does nothing; press-release-press (quick) toggles,
+    /// press-release-press-and-hold is push-to-talk. A single press still stops an active dictation.
+    var doublePressMode = false
+    var doublePressWindow: TimeInterval = 0.4
+    private var lastShortReleaseAt: Date?
+    private var isSecondPress = false
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -142,8 +148,14 @@ final class HotkeyMonitor {
         fnDownAt = Date()
         comboUsed = false
         pushToTalkActive = false
+        if doublePressMode {
+            isSecondPress = lastShortReleaseAt.map { Date().timeIntervalSince($0) < doublePressWindow } ?? false
+            lastShortReleaseAt = nil
+        }
         holdTimer = Timer.scheduledTimer(withTimeInterval: holdThreshold, repeats: false) { [weak self] _ in
             guard let self, self.fnDownAt != nil, !self.comboUsed else { return }
+            // In double-press mode only the second press may start push-to-talk.
+            if self.doublePressMode && !self.isSecondPress { return }
             self.pushToTalkActive = true
             self.recordingStartedByFnAt = Date()
             MainActor.assumeIsolated { self.delegate?.hotkeyPushToTalkStart() }
@@ -159,6 +171,14 @@ final class HotkeyMonitor {
         if pushToTalkActive {
             MainActor.assumeIsolated { delegate?.hotkeyPushToTalkStop() }
         } else if Date().timeIntervalSince(downAt) < holdThreshold {
+            var active = false
+            MainActor.assumeIsolated { active = delegate?.isDictationActive ?? false }
+            if doublePressMode && !active && !isSecondPress {
+                // First short press: wait for a second one.
+                lastShortReleaseAt = Date()
+                return
+            }
+            isSecondPress = false
             var started = false
             MainActor.assumeIsolated {
                 let wasIdle = !(delegate?.isDictationActive ?? false)

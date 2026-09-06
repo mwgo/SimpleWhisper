@@ -43,6 +43,13 @@ final class AppSettings {
     var holdThresholdMs: Int {
         didSet { defaults.set(holdThresholdMs, forKey: "holdThresholdMs") }
     }
+    /// Require a double fn press (quick = toggle, second press held = push-to-talk).
+    var fnDoublePress: Bool {
+        didSet { defaults.set(fnDoublePress, forKey: "fnDoublePress") }
+    }
+    var doublePressWindowMs: Int {
+        didSet { defaults.set(doublePressWindowMs, forKey: "doublePressWindowMs") }
+    }
     var defaultShellCommand: String {
         didSet { defaults.set(defaultShellCommand, forKey: "defaultShellCommand") }
     }
@@ -92,6 +99,8 @@ final class AppSettings {
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
+        fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false
+        doublePressWindowMs = defaults.object(forKey: "doublePressWindowMs") as? Int ?? 400
         // Templates created before the {tools} placeholder existed get it added.
         defaultShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "defaultShellCommand") ?? NamedPrompt.defaultShellCommand)
         commandShellCommand = Self.withToolsPlaceholder(defaults.string(forKey: "commandShellCommand") ?? NamedPrompt.defaultCommandShellCommand)
