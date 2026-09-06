@@ -87,7 +87,13 @@ struct HUDView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(Capsule().fill(model.theme.background))
-        .overlay(Capsule().strokeBorder(model.theme.border, lineWidth: 1))
+        .overlay {
+            if model.stage == .transcribing || model.stage == .processing {
+                RainbowBorder()
+            } else {
+                Capsule().strokeBorder(model.theme.border, lineWidth: 1)
+            }
+        }
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
         .fixedSize()
@@ -167,5 +173,33 @@ private struct SparkleIndicator: View {
                 .symbolEffect(.variableColor.iterative.reversing, options: .repeating)
         }
         .onAppear { animate = true }
+    }
+}
+
+
+/// Slowly rotating multi-colour ring shown while the speech model or the AI is working.
+private struct RainbowBorder: View {
+    private static let colors: [Color] = [
+        Color(red: 1.00, green: 0.35, blue: 0.35), Color(red: 1.00, green: 0.70, blue: 0.20),
+        Color(red: 0.55, green: 0.90, blue: 0.35), Color(red: 0.25, green: 0.80, blue: 0.95),
+        Color(red: 0.45, green: 0.45, blue: 1.00), Color(red: 0.90, green: 0.40, blue: 0.95),
+        Color(red: 1.00, green: 0.35, blue: 0.35),
+    ]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let seconds = context.date.timeIntervalSinceReferenceDate
+            let angle = Angle.degrees((seconds * 180).truncatingRemainder(dividingBy: 360))   // one lap every 2 s
+            let gradient = AngularGradient(colors: Self.colors, center: .center, angle: angle)
+            ZStack {
+                Capsule()
+                    .strokeBorder(gradient, lineWidth: 2.5)
+                    .blur(radius: 3)
+                    .opacity(0.8)
+                Capsule()
+                    .strokeBorder(gradient, lineWidth: 1.8)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
