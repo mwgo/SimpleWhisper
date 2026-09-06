@@ -99,7 +99,11 @@ struct HUDView: View {
         .foregroundStyle(model.theme.ink)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Capsule().fill(model.theme.background))
+        .background(
+            Capsule()
+                .fill(model.theme.background)
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        )
         .overlay {
             if model.stage == .transcribing || model.stage == .processing {
                 RainbowBorder()
