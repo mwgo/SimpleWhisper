@@ -381,7 +381,8 @@ final class DictationController: HotkeyMonitorDelegate {
         pipelineTask = nil
         state.phase = .idle
         endActivity()
-        hud.flash("Cancelled")
+        if settings.soundsEnabled { SoundPlayer.recordingCancelled() }
+        hud.flash("Cancelled", reverseDismiss: true)
     }
 
     private func beginActivity() {

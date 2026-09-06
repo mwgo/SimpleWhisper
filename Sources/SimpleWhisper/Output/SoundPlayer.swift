@@ -5,9 +5,12 @@ import AVFoundation
 enum SoundPlayer {
     private static let startPlayer = makePlayer(from: 440, to: 660)
     private static let stopPlayer = makePlayer(from: 660, to: 400)
+    /// Cancel: a lower, duller drop.
+    private static let cancelPlayer = makePlayer(from: 360, to: 220)
 
     static func recordingStarted() { play(startPlayer) }
     static func recordingStopped() { play(stopPlayer) }
+    static func recordingCancelled() { play(cancelPlayer) }
 
     private static func play(_ player: AVAudioPlayer?) {
         guard let player else { return }

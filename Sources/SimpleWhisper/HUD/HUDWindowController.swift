@@ -80,8 +80,8 @@ final class HUDWindowController: NSObject {
         model.push(level: level)
     }
 
-    /// Shows a short message, then hides.
-    func flash(_ text: String, duration: Duration = .seconds(1.2)) {
+    /// Shows a short message, then hides. `reverseDismiss` folds the capsule away to the left (cancellation).
+    func flash(_ text: String, duration: Duration = .seconds(1.2), reverseDismiss: Bool = false) {
         guard placement != .hidden else { return }
         if !panel.isVisible {
             anchor = CaretLocator.anchor(placement: placement)
@@ -92,18 +92,19 @@ final class HUDWindowController: NSObject {
         hideTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
-            self?.hide()
+            self?.hide(reverse: reverseDismiss)
         }
     }
 
     /// Plays the disappear animation, then removes the panel. `animated: false` hides immediately.
-    func hide(animated: Bool = true) {
+    func hide(animated: Bool = true, reverse: Bool = false) {
         hideTask?.cancel()
         hideTask = nil
         guard animated, panel.isVisible else {
             panel.orderOut(nil)
             return
         }
+        model.dismissReversed = reverse
         model.dismissal += 1
         hideTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(320))
@@ -151,7 +152,17 @@ final class HUDWindowController: NSObject {
                 origin.y = visible.maxY - 8 - size.height
             }
         }
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        let frame = NSRect(origin: origin, size: size)
+        if panel.isVisible, panel.frame.size != .zero, abs(panel.frame.width - frame.width) > 0.5 || abs(panel.frame.height - frame.height) > 0.5 {
+            // Animate the window in step with the SwiftUI content animation (see HUDView.layoutKey).
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
     }
 
     private func showPromptMenu() {

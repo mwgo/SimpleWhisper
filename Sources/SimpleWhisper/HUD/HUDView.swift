@@ -26,6 +26,8 @@ final class HUDModel {
     var appearance: Int = 0
     /// Incremented when the HUD is about to hide, to play the mirrored disappear animation.
     var dismissal: Int = 0
+    /// Success folds away to the right; cancellation folds back to the left.
+    var dismissReversed = false
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
 
@@ -108,6 +110,8 @@ struct HUDView: View {
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
         .fixedSize()
+        // Smooth width changes when the status text / prompt / stage changes.
+        .animation(.easeInOut(duration: 0.25), value: layoutKey)
         // The capsule unfolds from its left edge towards the right, like a drop spreading sideways.
         .scaleEffect(x: dropScale, y: 0.85 + 0.15 * dropScale, anchor: anchor)
         .opacity(dropOpacity)
@@ -130,8 +134,13 @@ struct HUDView: View {
     }
 
     /// Mirror of the appear animation: the capsule folds towards its right edge and a ripple runs the same way.
+    /// Anything that changes the capsule's size.
+    private var layoutKey: String {
+        "\(model.text)|\(model.detail ?? "")|\(model.stage)|\(model.showsCommandButton)|\(model.showsText)"
+    }
+
     private func playDismissAnimation() {
-        anchor = .trailing
+        anchor = model.dismissReversed ? .leading : .trailing
         ripple = 0
         withAnimation(.easeIn(duration: 0.28)) {
             dropScale = 0.06
