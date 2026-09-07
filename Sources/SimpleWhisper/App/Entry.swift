@@ -23,6 +23,10 @@ enum Entry {
             RunLoop.main.run()
             return
         }
+        if arguments.contains("--ax-probe") {
+            AXProbe.run()
+            return
+        }
         if arguments.contains("--hud-demo") {
             HUDDemo.run()
             return

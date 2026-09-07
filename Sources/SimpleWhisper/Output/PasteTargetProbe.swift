@@ -19,7 +19,7 @@ enum PasteTargetProbe {
     /// and assume pasting works (the previous behaviour).
     static func canPasteIntoFocusedElement() -> Bool {
         guard Permissions.accessibilityGranted else { return true }
-        guard let element = AXFocus.focusedElement() else {
+        guard let element = AXFocus.focusedTextElement() else {
             // Apps that expose no accessibility tree at all (some games, remote desktops, apps whose
             // tree is still switching on): assume the paste will land rather than hide the text away.
             DebugLog.write("PasteTargetProbe: focused element unknown; assuming pasteable")

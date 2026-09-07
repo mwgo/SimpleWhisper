@@ -21,7 +21,7 @@ enum SelectionReader {
 
     private static func accessibilitySelectionLength() -> Int? {
         guard Permissions.accessibilityGranted else { return nil }
-        guard let element = AXFocus.focusedElement() else { return nil }
+        guard let element = AXFocus.focusedTextElement() else { return nil }
         var rangeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
               let rangeRef else { return nil }
@@ -32,7 +32,7 @@ enum SelectionReader {
 
     private static func accessibilitySelection() -> String? {
         guard Permissions.accessibilityGranted else { return nil }
-        guard let element = AXFocus.focusedElement() else { return nil }
+        guard let element = AXFocus.focusedTextElement() else { return nil }
         var valueRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &valueRef) == .success else { return nil }
         return valueRef as? String

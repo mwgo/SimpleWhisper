@@ -33,4 +33,46 @@ enum AXFocus {
         }
         return (appFocusedRef as! AXUIElement)
     }
+
+    private static let textRoles: Set<String> = [
+        kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String, "AXSearchField", "AXSecureTextField",
+    ]
+    private static let containerRoles: Set<String> = [
+        kAXSplitGroupRole as String, kAXGroupRole as String, kAXScrollAreaRole as String, kAXLayoutAreaRole as String,
+    ]
+
+    /// The focused element, or – when focus sits on a container (Word hands focus to a split group
+    /// around the document) – the first text element inside it.
+    static func focusedTextElement() -> AXUIElement? {
+        guard let focused = focusedElement() else { return nil }
+        return textElement(within: focused)
+    }
+
+    static func textElement(within focused: AXUIElement) -> AXUIElement {
+        let focusedRole = role(of: focused)
+        guard containerRoles.contains(focusedRole) || focusedRole == (kAXWindowRole as String) else { return focused }
+        var queue = [focused]
+        var visited = 0
+        while !queue.isEmpty, visited < 400 {
+            let element = queue.removeFirst()
+            visited += 1
+            let elementRole = role(of: element)
+            if textRoles.contains(elementRole) {
+                DebugLog.write("AXFocus: focus on \(focusedRole), using nested \(elementRole)")
+                return element
+            }
+            var childrenRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+               let children = childrenRef as? [AXUIElement] {
+                queue.append(contentsOf: children)
+            }
+        }
+        return focused
+    }
+
+    static func role(of element: AXUIElement) -> String {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &ref) == .success else { return "" }
+        return ref as? String ?? ""
+    }
 }
