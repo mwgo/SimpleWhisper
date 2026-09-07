@@ -11,6 +11,11 @@ final class WhisperKitEngine: SpeechEngine {
 
     var isReady: Bool { whisperKit != nil }
 
+    /// Whisper decodes 30 s windows; the vocabulary prompt is only used when the whole recording fits one.
+    private static let singleWindowSeconds = 30.0
+    /// Cleared the first time the prompt produces an empty/truncated result for this model.
+    private var promptSupported = true
+
     func prepare(status: @escaping EngineStatusHandler) async throws {
         if whisperKit != nil { return }
         status(isDownloaded ? "Loading \(kind.title)… (first load compiles the model)" : "Downloading \(kind.title)…")
@@ -74,8 +79,11 @@ final class WhisperKitEngine: SpeechEngine {
             debugInfo = "detected=\(detection.language) top: \(top)"
         }
 
+        let seconds = Double(samples.count) / 16_000
+        // The vocabulary prompt is only reliable within a single 30 s window: with several windows
+        // WhisperKit drops whole segments (Small) or returns nothing at all (Turbo, Large v3).
         var promptTokens: [Int]? = nil
-        if !vocabulary.isEmpty, let tokenizer = kit.tokenizer {
+        if !vocabulary.isEmpty, promptSupported, seconds <= Self.singleWindowSeconds, let tokenizer = kit.tokenizer {
             let promptText = " " + vocabulary.map(\.text).joined(separator: ", ") + "."
             let tokens = tokenizer.encode(text: promptText).filter { $0 < tokenizer.specialTokens.specialTokenBegin }
             promptTokens = tokens.isEmpty ? nil : tokens
@@ -95,16 +103,33 @@ final class WhisperKitEngine: SpeechEngine {
         )
         var results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
         var text = Self.joinedText(results)
-        if text.isEmpty, promptTokens != nil {
-            // Some variants (large-v3 turbo) return nothing when a vocabulary prompt is supplied.
+        DebugLog.write("Whisper pass 1: \(String(format: "%.1f", seconds)) s → \(text.count) chars, \(results.flatMap(\.segments).count) segments, prompt=\(promptTokens?.count ?? 0) tokens")
+        if promptTokens != nil, Self.looksTruncated(text, seconds: seconds) {
+            // Some variants (large-v3 turbo/compressed) return nothing – or only a fragment of a long
+            // recording – when a vocabulary prompt is supplied. Retry without it and keep the longer text.
             var plain = options
             plain.promptTokens = nil
-            results = try await kit.transcribe(audioArray: samples, decodeOptions: plain)
-            text = Self.joinedText(results)
-            debugInfo = (debugInfo ?? "") + " (retried without vocabulary prompt)"
+            let retried = try await kit.transcribe(audioArray: samples, decodeOptions: plain)
+            let retriedText = Self.joinedText(retried)
+            DebugLog.write("Whisper pass 2 (no prompt): \(retriedText.count) chars, \(retried.flatMap(\.segments).count) segments")
+            if retriedText.count > text.count {
+                results = retried
+                text = retriedText
+                debugInfo = (debugInfo ?? "") + " (retried without vocabulary prompt)"
+                // This model cannot cope with the prompt; stop paying for the first pass.
+                promptSupported = false
+                DebugLog.write("Vocabulary prompt disabled for \(kind.title)")
+            }
         }
         let detected = languageCode ?? results.first?.language
         return Transcription(text: text, detectedLanguage: detected, debugInfo: debugInfo)
+    }
+
+    /// Empty output, or fewer than ~3 characters per second on a recording longer than 10 s,
+    /// almost certainly means the decoder dropped whole windows.
+    private static func looksTruncated(_ text: String, seconds: Double) -> Bool {
+        if text.isEmpty { return true }
+        return seconds > 10 && Double(text.count) / seconds < 3
     }
 
     private static func joinedText(_ results: [TranscriptionResult]) -> String {

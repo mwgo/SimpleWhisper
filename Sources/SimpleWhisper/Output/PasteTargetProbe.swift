@@ -19,14 +19,12 @@ enum PasteTargetProbe {
     /// and assume pasting works (the previous behaviour).
     static func canPasteIntoFocusedElement() -> Bool {
         guard Permissions.accessibilityGranted else { return true }
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef)
-        guard status == .success, let focusedRef else {
-            // Apps that expose no accessibility tree at all (some games, remote desktops): assume yes.
-            return status == .cannotComplete || status == .apiDisabled
+        guard let element = AXFocus.focusedElement() else {
+            // Apps that expose no accessibility tree at all (some games, remote desktops, apps whose
+            // tree is still switching on): assume the paste will land rather than hide the text away.
+            DebugLog.write("PasteTargetProbe: focused element unknown; assuming pasteable")
+            return true
         }
-        let element = focusedRef as! AXUIElement
         var roleRef: CFTypeRef?
         let role = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success ? (roleRef as? String ?? "") : ""
         if textRoles.contains(role) { return true }

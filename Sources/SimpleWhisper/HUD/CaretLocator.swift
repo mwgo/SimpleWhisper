@@ -88,13 +88,7 @@ enum CaretLocator {
         return value as? String
     }
 
-    private static func focusedElement() -> AXUIElement? {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-              let focusedRef else { return nil }
-        return (focusedRef as! AXUIElement)
-    }
+    private static func focusedElement() -> AXUIElement? { AXFocus.focusedElement() }
 
     /// Caret rectangle as reported by Accessibility (top-left-origin global coordinates).
     private static func rawCaretRect(of element: AXUIElement) -> CGRect? {

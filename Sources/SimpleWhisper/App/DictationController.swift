@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AVFoundation
 
 enum DictationError: LocalizedError {
     case tooShort
@@ -256,9 +257,23 @@ final class DictationController: HotkeyMonitorDelegate {
         }
     }
 
+    /// Keeps the most recent recording as `last-recording.wav` in the data folder so a bad
+    /// transcription can be reproduced with `--transcribe`.
+    private static func saveLastRecording(_ samples: [Float]) {
+        let url = DataStore.directory.appendingPathComponent("last-recording.wav")
+        do {
+            let buffer = try AudioConversion.buffer(from: samples, to: AudioRecorder.targetFormat)
+            let file = try AVAudioFile(forWriting: url, settings: AudioRecorder.targetFormat.settings)
+            try file.write(from: buffer)
+        } catch {
+            DebugLog.write("Could not save last recording: \(error.localizedDescription)")
+        }
+    }
+
     private func runCommandPipeline(samples: [Float]) async {
         do {
             guard samples.count >= Int(AudioRecorder.targetFormat.sampleRate) / 3 else { throw DictationError.tooShort }
+            Self.saveLastRecording(samples)
             var selection = await SelectionReader.selectedText(in: paster.targetApplication)
             try Task.checkCancellation()
             // Some editors (VS Code) copy the whole line when nothing is selected; if that equals the
@@ -403,6 +418,7 @@ final class DictationController: HotkeyMonitorDelegate {
     private func runPipeline(samples: [Float]) async {
         do {
             guard samples.count >= Int(AudioRecorder.targetFormat.sampleRate) / 3 else { throw DictationError.tooShort }
+            Self.saveLastRecording(samples)
             let engine = try await ensureEngine(settings.engineKind)
             try Task.checkCancellation()
             hud.update(text: "Transcribing…", stage: .transcribing)
