@@ -14,6 +14,7 @@ enum AXProbe {
                 print("from window: \(role(found)) / \(attr(found, kAXDescriptionAttribute) ?? "-")")
             }
         }
+        print("can paste: \(MainActor.assumeIsolated { PasteTargetProbe.canPasteIntoFocusedElement() })")
         if let text = AXFocus.focusedTextElement() { print("text element: \(role(text)) / \(attr(text, kAXDescriptionAttribute) ?? "-")") }
         dump(element, label: "focused", depth: 0, maxDepth: 3)
         var parent = element

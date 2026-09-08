@@ -27,6 +27,12 @@ enum PasteTargetProbe {
         }
         var roleRef: CFTypeRef?
         let role = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success ? (roleRef as? String ?? "") : ""
+        if role.isEmpty {
+            // JetBrains IDEs report a focused element with no attributes at all for embedded panels
+            // (e.g. the Claude Code tool window). Unknown means "probably editable".
+            DebugLog.write("PasteTargetProbe: focused element has no role; assuming pasteable")
+            return true
+        }
         if textRoles.contains(role) { return true }
         if nonEditableRoles.contains(role) { return false }
         // Unknown role (custom editors): editable if it exposes a selected-text range.
