@@ -337,6 +337,8 @@ final class DictationController: HotkeyMonitorDelegate {
                 endActivity()
                 hud.hide()
             }
+        } catch let error as DictationError where error == .noSpeech || error == .tooShort {
+            dismissQuietly(reason: error)
         } catch {
             DebugLog.write("Command error: \(error)")
             showError(error.localizedDescription)
@@ -486,6 +488,8 @@ final class DictationController: HotkeyMonitorDelegate {
                 endActivity()
                 hud.hide()
             }
+        } catch let error as DictationError where error == .noSpeech || error == .tooShort {
+            dismissQuietly(reason: error)
         } catch {
             DebugLog.write("Pipeline error: \(error)")
             showError(error.localizedDescription)
@@ -494,6 +498,15 @@ final class DictationController: HotkeyMonitorDelegate {
 
     private func makeProcessor(for prompt: NamedPrompt) -> TextProcessor {
         AIProviderFactory.makeProcessor(provider: prompt.provider, shellTemplate: prompt.shellCommand, settings: settings, context: .prompt)
+    }
+
+    /// Nothing was said: fold the HUD away like a cancellation instead of showing an error.
+    private func dismissQuietly(reason: DictationError) {
+        DebugLog.write("Dismissed quietly: \(reason)")
+        endActivity()
+        state.phase = .idle
+        if settings.soundsEnabled { SoundPlayer.recordingCancelled() }
+        hud.hide(reverse: true)
     }
 
     private func showError(_ message: String) {
