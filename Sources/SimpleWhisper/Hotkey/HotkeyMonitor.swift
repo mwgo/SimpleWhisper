@@ -86,6 +86,13 @@ enum HotkeyError: LocalizedError {
 final class HotkeyMonitor {
     private static let escapeKeyCode: Int64 = 53
     private static let controlKeyCodes: Set<Int64> = [59, 62]
+    /// Shift, Control, Option, Command (left/right) and Caps Lock.
+    private static let modifierKeyCodes: Set<Int64> = [56, 60, 59, 62, 58, 61, 54, 55, 57]
+
+    private static func hasOtherModifiers(_ flags: CGEventFlags, besides trigger: CGEventFlags) -> Bool {
+        let others: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
+        return !flags.intersection(others).subtracting(trigger).isEmpty
+    }
 
     /// The key that starts dictation (fn by default; left/right Command or Option).
     var triggerKey: HotkeyKey = .fn
@@ -152,10 +159,21 @@ final class HotkeyMonitor {
         switch type {
         case .flagsChanged where keyCode == triggerKey.keyCode:
             if event.flags.contains(triggerKey.flag) {
-                fnPressed()
+                // fn pressed while another modifier is already held (ctrl+fn…) is someone else's shortcut.
+                fnPressed(asCombo: Self.hasOtherModifiers(event.flags, besides: triggerKey.flag))
             } else {
                 fnReleased()
             }
+        case .flagsChanged where Self.modifierKeyCodes.contains(keyCode) && (fnDownAt != nil && !pushToTalkActive || recentlyStartedByFn):
+            // A modifier pressed together with fn (or right after a short fn press) is a shortcut, not dictation.
+            comboUsed = true
+            if recentlyStartedByFn {
+                recordingStartedByFnAt = nil
+                pushToTalkActive = false
+                cancelHold()
+                MainActor.assumeIsolated { delegate?.hotkeyCancelSilently() }
+            }
+            cancelHold()
         case .flagsChanged where Self.controlKeyCodes.contains(keyCode) && event.flags.contains(.maskControl):
             var handled = false
             MainActor.assumeIsolated { handled = delegate?.hotkeyRunCommand() ?? false }
@@ -219,10 +237,11 @@ final class HotkeyMonitor {
         return Date().timeIntervalSince(started) < shortcutGrace
     }
 
-    private func fnPressed() {
+    private func fnPressed(asCombo: Bool) {
         guard fnDownAt == nil else { return }
         fnDownAt = Date()
-        comboUsed = false
+        comboUsed = asCombo
+        if asCombo { return }
         pushToTalkActive = false
         if doublePressMode {
             isSecondPress = lastShortReleaseAt.map { Date().timeIntervalSince($0) < doublePressWindow } ?? false
