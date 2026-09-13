@@ -39,6 +39,8 @@ final class HUDWindowController: NSObject {
         // The system shadow is derived from the window's alpha mask and lags behind the scale
         // animation, leaving a thin dark rim around the capsule; the capsule draws its own shadow.
         panel.hasShadow = false
+        // Slightly see-through so the HUD never fully hides what it floats over.
+        panel.alphaValue = 0.70
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
