@@ -40,7 +40,7 @@ final class HUDWindowController: NSObject {
         // animation, leaving a thin dark rim around the capsule; the capsule draws its own shadow.
         panel.hasShadow = false
         // Slightly see-through so the HUD never fully hides what it floats over.
-        panel.alphaValue = 0.70
+        panel.alphaValue = 0.85
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
