@@ -50,6 +50,11 @@ enum AXFocus {
 
     static func textElement(within focused: AXUIElement) -> AXUIElement {
         let focusedRole = role(of: focused)
+        if focusedRole == "AXWebArea", let inner = focusedDescendant(of: focused) {
+            // Chromium reports the (i)frame's web area as focused; the real focus is a node inside it.
+            DebugLog.write("AXFocus: focus on AXWebArea, using focused descendant \(role(of: inner))")
+            return inner
+        }
         guard containerRoles.contains(focusedRole) || focusedRole == (kAXWindowRole as String) else { return focused }
         var queue = [focused]
         var visited = 0
@@ -68,6 +73,33 @@ enum AXFocus {
             }
         }
         return focused
+    }
+
+    private static func focusedDescendant(of root: AXUIElement) -> AXUIElement? {
+        var queue: [AXUIElement] = []
+        var childrenRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(root, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+           let children = childrenRef as? [AXUIElement] { queue = children }
+        var visited = 0
+        while !queue.isEmpty, visited < 600 {
+            let element = queue.removeFirst()
+            visited += 1
+            var focusedRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXFocusedAttribute as CFString, &focusedRef) == .success,
+               focusedRef as? Bool == true, role(of: element) != "AXWebArea" {
+                return element
+            }
+            var ref: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &ref) == .success,
+               let children = ref as? [AXUIElement] { queue.append(contentsOf: children) }
+        }
+        return nil
+    }
+
+    /// True for nodes inside a `contenteditable` region (Chromium/WebKit expose `AXEditableAncestor`).
+    static func hasEditableAncestor(_ element: AXUIElement) -> Bool {
+        var ref: CFTypeRef?
+        return AXUIElementCopyAttributeValue(element, "AXEditableAncestor" as CFString, &ref) == .success
     }
 
     static func role(of element: AXUIElement) -> String {

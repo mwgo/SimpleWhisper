@@ -34,6 +34,7 @@ enum PasteTargetProbe {
             return true
         }
         if textRoles.contains(role) { return true }
+        if AXFocus.hasEditableAncestor(element) { return true }   // contenteditable editors (VS Code Markdown, Notion…)
         if nonEditableRoles.contains(role) { return false }
         // Unknown role (custom editors): editable if it exposes a selected-text range.
         var rangeRef: CFTypeRef?
