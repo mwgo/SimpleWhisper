@@ -287,6 +287,7 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.placement = settings.hudPlacement
         hud.showsText = settings.hudShowsText
         hud.theme = settings.hudTheme
+        hud.glass = settings.hudGlass
         hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording,
                  commandButton: settings.commandModeEnabled && !liveSession,
                  liveEditor: liveSession ? liveEditor : nil)

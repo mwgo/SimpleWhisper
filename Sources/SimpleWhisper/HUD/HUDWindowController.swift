@@ -37,6 +37,14 @@ final class HUDWindowController: NSObject {
         get { model.theme }
         set { model.theme = newValue }
     }
+    /// Glass renders its own translucency; the solid fill is made slightly see-through by the panel instead.
+    var glass: Bool {
+        get { model.glass }
+        set {
+            model.glass = newValue
+            panel.alphaValue = newValue ? 1 : 0.85
+        }
+    }
     /// Mirrors the "show status text" setting.
     var showsText: Bool {
         get { model.showsText }
@@ -96,7 +104,8 @@ final class HUDWindowController: NSObject {
         model.liveEditor = liveEditor
         panel.acceptsKey = liveEditor != nil
         guard let liveEditor else { return }
-        liveEditor.inkColor = NSColor(model.theme.ink)
+        liveEditor.inkColor = model.glass ? .labelColor : NSColor(model.theme.ink)
+        liveEditor.textShadow = model.glass
         model.editorSize = liveEditor.size
         liveEditor.onSizeChange = { [weak self] size in
             self?.model.editorSize = size

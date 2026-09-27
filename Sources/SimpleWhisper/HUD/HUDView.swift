@@ -35,6 +35,7 @@ final class HUDModel {
     var editorSize: CGSize = .zero
     /// The card shows a finished text that could not be pasted: Copy / Close instead of the status.
     var resultMode = false
+    var glass = true
 
     static let barCount = 9
 
@@ -79,6 +80,9 @@ struct HUDView: View {
         .onChange(of: model.dismissal) { _, _ in playDismissAnimation() }
     }
 
+    /// On glass the system label colour adapts to what is behind; the theme ink is for solid fills.
+    private var inkStyle: AnyShapeStyle { model.glass ? AnyShapeStyle(.primary) : AnyShapeStyle(model.theme.ink) }
+
     private var isBusy: Bool { model.stage == .transcribing || model.stage == .processing }
 
     /// Live typing: status row and editor in one card.
@@ -109,7 +113,7 @@ struct HUDView: View {
             LiveEditorView(controller: editor)
                 .frame(width: model.editorSize.width, height: model.editorSize.height)
         }
-        .background(shape.fill(model.theme.background).shadow(color: .black.opacity(0.18), radius: 6, y: 2))
+        .hudBackground(shape, theme: model.theme, glass: model.glass)
         .overlay {
             if isBusy {
                 RainbowBorder(shape: shape)
@@ -127,10 +131,10 @@ struct HUDView: View {
                 Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
                 if let title { Text(title).font(.system(size: 12, weight: .semibold, design: .rounded)) }
             }
-            .foregroundStyle(model.theme.ink)
+            .foregroundStyle(inkStyle)
             .padding(.horizontal, title == nil ? 0 : 8)
             .frame(minWidth: 24, minHeight: 22)
-            .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.ink.opacity(0.12)))
+            .background(RoundedRectangle(cornerRadius: 6).fill((model.glass ? Color.primary : model.theme.ink).opacity(0.12)))
         }
         .buttonStyle(.plain)
         .focusable(false)
@@ -177,18 +181,14 @@ struct HUDView: View {
                 .padding(.leading, 2)
             }
         }
-        .foregroundStyle(model.theme.ink)
+        .foregroundStyle(inkStyle)
     }
 
     private var capsule: some View {
         statusRow()
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(
-            Capsule()
-                .fill(model.theme.background)
-                .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
-        )
+        .hudBackground(Capsule(), theme: model.theme, glass: model.glass)
         .overlay {
             if isBusy {
                 RainbowBorder(shape: Capsule())
@@ -258,11 +258,11 @@ struct HUDView: View {
     private var indicator: some View {
         switch model.stage {
         case .recording:
-            RecordingBars(levels: model.levels, color: model.theme.recordingBars)
+            RecordingBars(levels: model.levels, color: model.glass ? Color(red: 1.0, green: 0.42, blue: 0.40) : model.theme.recordingBars)
         case .transcribing:
-            WaveBars(color: model.theme.ink)
+            WaveBars(color: model.glass ? .primary : model.theme.ink)
         case .processing:
-            SparkleIndicator(color: model.theme.ink)
+            SparkleIndicator(color: model.glass ? .primary : model.theme.ink)
         case .message:
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .bold))
@@ -358,5 +358,18 @@ private struct RainbowBorder<S: InsettableShape>: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+private extension View {
+    /// Theme-tinted Liquid Glass, or the classic solid fill with a soft shadow.
+    @ViewBuilder
+    func hudBackground<S: Shape>(_ shape: S, theme: HUDTheme, glass: Bool) -> some View {
+        if glass {
+            // Only a light theme tint, so the system's glass (including a "clear" setting) shows through.
+            self.glassEffect(.regular.tint(theme.background.opacity(0.3)), in: shape)
+        } else {
+            self.background(shape.fill(theme.background).shadow(color: .black.opacity(0.18), radius: 6, y: 2))
+        }
     }
 }

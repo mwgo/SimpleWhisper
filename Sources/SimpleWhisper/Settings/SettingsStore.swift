@@ -44,6 +44,10 @@ final class AppSettings {
         didSet { defaults.set(noiseFilterEnabled, forKey: "noiseFilterEnabled") }
     }
     /// Show the status text ("Recording", "Processing · …") next to the animation.
+    /// Liquid Glass background tinted with the theme colour instead of a solid fill.
+    var hudGlass: Bool {
+        didSet { defaults.set(hudGlass, forKey: "hudGlass") }
+    }
     var hudShowsText: Bool {
         didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
     }
@@ -143,6 +147,7 @@ final class AppSettings {
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
+        hudGlass = defaults.object(forKey: "hudGlass") as? Bool ?? true
         soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
         liveTypingEnabled = defaults.bool(forKey: "liveTypingEnabled")
         noiseFilterEnabled = defaults.object(forKey: "noiseFilterEnabled") as? Bool ?? true

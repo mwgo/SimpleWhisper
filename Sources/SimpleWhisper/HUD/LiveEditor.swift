@@ -17,6 +17,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     /// Called after the preferred size changed.
     var onSizeChange: (CGSize) -> Void = { _ in }
     var inkColor: NSColor = .labelColor { didSet { applyColors() } }
+    /// On glass a faint shadow keeps the text readable over bright content behind the HUD.
+    var textShadow = false { didSet { applyColors() } }
     /// The user clicked, moved the caret or typed (not our own insertions).
     var onUserEdit: () -> Void = {}
     private var programmaticChange = false
@@ -44,12 +46,23 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     }
 
     private var normalAttributes: [NSAttributedString.Key: Any] {
-        [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: inkColor]
+        var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: inkColor]
+        if textShadow {
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+            shadow.shadowBlurRadius = 2.5
+            shadow.shadowOffset = .zero
+            attributes[.shadow] = shadow
+        }
+        return attributes
     }
 
     private func applyColors() {
         textView.textColor = inkColor
         textView.insertionPointColor = inkColor
+        if let storage = textView.textStorage, storage.length > 0 {
+            storage.addAttributes(normalAttributes, range: NSRange(location: 0, length: storage.length))
+        }
         textView.typingAttributes = normalAttributes
         textView.selectedTextAttributes = [.backgroundColor: inkColor.withAlphaComponent(0.22)]
     }

@@ -91,6 +91,7 @@ enum HUDDemo {
         controller.placement = ProcessInfo.processInfo.environment["SW_HUD_PLACEMENT"].flatMap(HUDPlacement.init(rawValue:)) ?? .nearCaret
         controller.showsText = ProcessInfo.processInfo.environment["SW_HUD_NOTEXT"] == nil
         controller.theme = ProcessInfo.processInfo.environment["SW_HUD_THEME"].flatMap(HUDTheme.init(rawValue:)) ?? .freshGreen
+        controller.glass = ProcessInfo.processInfo.environment["SW_HUD_SOLID"] == nil
         hud = controller
         if ProcessInfo.processInfo.environment["SW_HUD_LIVE"] != nil {
             runLive(controller)

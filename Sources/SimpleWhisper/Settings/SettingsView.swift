@@ -104,6 +104,7 @@ struct GeneralSettingsView: View {
                     ForEach(HUDPlacement.allCases) { placement in Text(placement.title).tag(placement) }
                 }
                 Toggle("Show status text (otherwise only the animation)", isOn: Binding(get: { settings.hudShowsText }, set: { settings.hudShowsText = $0 }))
+                Toggle("Glass background", isOn: Binding(get: { settings.hudGlass }, set: { settings.hudGlass = $0 }))
                 LabeledContent("Colour") {
                     HStack(spacing: 8) {
                         ForEach(HUDTheme.allCases) { theme in
