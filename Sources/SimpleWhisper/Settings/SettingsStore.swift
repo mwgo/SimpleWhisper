@@ -97,6 +97,9 @@ final class AppSettings {
     var geminiModel: String {
         didSet { defaults.set(geminiModel, forKey: "geminiModel") }
     }
+    var geminiTranscriptionModel: String {
+        didSet { defaults.set(geminiTranscriptionModel, forKey: GeminiSpeechEngine.modelKey) }
+    }
     /// Provider used by command mode and the assistant (no-selection) mode.
     var commandProvider: PromptProvider {
         didSet { defaults.set(commandProvider.rawValue, forKey: "commandProvider") }
@@ -147,6 +150,7 @@ final class AppSettings {
         claudeModel = defaults.string(forKey: "claudeModel") ?? "claude-opus-5"
         openAIModel = defaults.string(forKey: "openAIModel") ?? "gpt-4o-mini"
         geminiModel = defaults.string(forKey: "geminiModel") ?? "gemini-2.5-flash"
+        geminiTranscriptionModel = defaults.string(forKey: GeminiSpeechEngine.modelKey) ?? GeminiSpeechEngine.defaultModel
         commandProvider = PromptProvider(rawValue: defaults.string(forKey: "commandProvider") ?? "") ?? .claudeCode
         markdownWhenNotPasting = defaults.object(forKey: "markdownWhenNotPasting") as? Bool ?? true
         allowWebAccess = defaults.object(forKey: "allowWebAccess") as? Bool ?? false

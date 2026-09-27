@@ -92,7 +92,7 @@ enum DebugCLI {
                          [--prompt <name>] [--clipboard <text>] [--no-vocabulary] [--no-punctuation]
                          [--selection <text>]   (command mode: audio = instruction applied to <text>)
 
-      --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech
+      --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech | geminiAPI
       --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
       --prompt     name of a saved prompt to post-process the text with AI
       --clipboard  text used for the clipboard macro (default: current clipboard)

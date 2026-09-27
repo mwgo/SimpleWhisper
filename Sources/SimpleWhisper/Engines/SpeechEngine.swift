@@ -14,6 +14,7 @@ enum EngineError: LocalizedError {
     case localeUnsupported(String)
     case noAudioFormat
     case audioConversionFailed
+    case missingAPIKey(String)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,7 @@ enum EngineError: LocalizedError {
         case .localeUnsupported(let id): return "Locale \(id) is not supported by Apple Speech."
         case .noAudioFormat: return "Apple Speech did not provide an audio format."
         case .audioConversionFailed: return "Audio conversion failed."
+        case .missingAPIKey(let provider): return "\(provider) API key is not set (Settings › General › Speech model)."
         }
     }
 }
@@ -45,6 +47,8 @@ enum EngineFactory {
             return ParakeetEngine()
         case .appleSpeech:
             return AppleSpeechEngine()
+        case .geminiAPI:
+            return GeminiSpeechEngine()
         }
     }
 }

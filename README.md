@@ -2,7 +2,7 @@
 
 Local, menu-bar dictation for macOS 26 (Apple Silicon). Speak, and the text lands in the
 editor you were typing in. Everything runs on-device: Whisper (WhisperKit), NVIDIA Parakeet v3
-(FluidAudio) or Apple's built-in speech recognizers. Optional AI post-processing with named
+(FluidAudio) or Apple's built-in speech recognizers, with Gemini API as an optional cloud engine. Optional AI post-processing with named
 prompts (Apple Intelligence or any CLI such as `claude -p`).
 
 ## Features
@@ -18,6 +18,9 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   post-processing prompt.
 - **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
   Apple Speech. Models download on first use.
+- **Gemini API (cloud, optional)**: sends the recording to Google's Gemini API
+  (default model `gemini-2.5-flash`). Needs an API key from aistudio.google.com, entered in
+  Settings › General; the vocabulary list is passed in the instructions.
 - **Language**: auto-detect among a configurable set of languages (default English; any of
   Whisper's 99 languages can be added), or a fixed language, or auto-detect anything. Mixed sentences are fine.
 - **Vocabulary**: words the models tend to get wrong plus aliases that are

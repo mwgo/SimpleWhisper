@@ -6,6 +6,7 @@ enum EngineKind: String, CaseIterable, Codable, Identifiable {
     case whisperSmall
     case parakeetV3
     case appleSpeech
+    case geminiAPI
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum EngineKind: String, CaseIterable, Codable, Identifiable {
         case .whisperSmall: return "Whisper Small"
         case .parakeetV3: return "Parakeet v3"
         case .appleSpeech: return "Apple Speech (macOS 26)"
+        case .geminiAPI: return "Gemini API (cloud)"
         }
     }
 
@@ -26,6 +28,7 @@ enum EngineKind: String, CaseIterable, Codable, Identifiable {
         case .whisperSmall: return "WhisperKit · ~200 MB · fast, for testing"
         case .parakeetV3: return "FluidAudio · ~0.6 GB · very fast, 25 languages"
         case .appleSpeech: return "Built-in · Polish via DictationTranscriber, English via SpeechTranscriber"
+        case .geminiAPI: return "Google · sends the recording to the Gemini API · needs an API key and internet"
         }
     }
 

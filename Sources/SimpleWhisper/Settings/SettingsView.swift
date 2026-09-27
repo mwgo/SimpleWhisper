@@ -52,6 +52,7 @@ struct GeneralSettingsView: View {
     var controller: DictationController
     @State private var permissionsTick = 0
     @State private var launchAtLogin = LaunchAtLogin()
+    @State private var geminiKey = KeychainStore.get(AIProviderFactory.geminiKeyAccount) ?? ""
 
     var body: some View {
         let settings = controller.settings
@@ -64,6 +65,13 @@ struct GeneralSettingsView: View {
                     }
                 }
                 Text(settings.engineKind.subtitle).font(.caption).foregroundStyle(.secondary)
+                if settings.engineKind == .geminiAPI {
+                    SecureField("Gemini API key", text: $geminiKey)
+                        .onChange(of: geminiKey) { _, value in KeychainStore.set(value.trimmingCharacters(in: .whitespacesAndNewlines), for: AIProviderFactory.geminiKeyAccount) }
+                    TextField("Transcription model", text: Binding(get: { settings.geminiTranscriptionModel }, set: { settings.geminiTranscriptionModel = $0 }))
+                    Text("Every recording is uploaded to Google. The key is shared with the Gemini provider in the AI tab. Get one at aistudio.google.com.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button(state.isModelLoading ? "Loading…" : "Load model now") { Task { await controller.loadModel() } }
                         .disabled(state.isModelLoading)
