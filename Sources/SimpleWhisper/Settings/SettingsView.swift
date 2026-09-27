@@ -231,6 +231,7 @@ struct HotkeyLegend: View {
             row("esc", "cancel recording or processing")
             if liveTyping {
                 row("typing, mouse", "Live typing: edit the text in the editor under the HUD")
+                row("⌃ + letter / space", "Live typing: pick the prompt with that shortcut / plain text")
             } else {
                 row("letter / space", "while recording: pick the prompt with that shortcut / plain text")
                 if commandMode {

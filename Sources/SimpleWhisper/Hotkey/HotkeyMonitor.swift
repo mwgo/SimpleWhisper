@@ -203,7 +203,12 @@ final class HotkeyMonitor {
                     return nil
                 }
             } else if live {
-                break
+                // Letters belong to the editor; Control + letter picks a prompt, Control + space plain text.
+                if event.flags.contains(.maskControl), !event.flags.contains(.maskCommand),
+                   let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers, character.count == 1,
+                   promptShortcut(character) {
+                    return nil
+                }
             } else if let character = Self.character(of: event), !event.flags.contains(.maskCommand), !event.flags.contains(.maskControl),
                       promptShortcut(character) {
                 return nil

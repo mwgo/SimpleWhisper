@@ -91,7 +91,7 @@ struct HUDView: View {
                     cardButton("Copy", systemImage: "doc.on.doc", help: "Copy the text and close", action: onCopyResult)
                     cardButton("Close", systemImage: "xmark", help: "Close (Esc)", action: onCloseResult)
                 } else {
-                    statusRow
+                    statusRow(alwaysShowPrompt: true)
                         .fixedSize()
                         .contentShape(Rectangle())
                         .onTapGesture(perform: onTap)
@@ -137,24 +137,26 @@ struct HUDView: View {
         .help(help)
     }
 
-    private var statusRow: some View {
+    /// `alwaysShowPrompt`: the live card always offers the prompt picker, "Plain text" included.
+    private func statusRow(alwaysShowPrompt: Bool = false) -> some View {
         HStack(spacing: 10) {
             indicator
                 .frame(width: 34, height: 18)
             let showsStatus = model.showsText || model.stage == .message
+            let detail = model.detail.flatMap { $0.isEmpty ? nil : $0 } ?? (alwaysShowPrompt ? "Plain text" : nil)
             if showsStatus {
                 Text(model.text)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .lineLimit(1)
             }
             // The prompt/detail line is always shown, even in animation-only mode.
-            if let detail = model.detail, !detail.isEmpty {
+            if let detail {
                 Text(showsStatus ? "· \(detail)" : detail)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .opacity(0.8)
                     .lineLimit(1)
             }
-            if showsStatus || !(model.detail ?? "").isEmpty {
+            if showsStatus || detail != nil {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .bold))
                     .opacity(0.7)
@@ -179,7 +181,7 @@ struct HUDView: View {
     }
 
     private var capsule: some View {
-        statusRow
+        statusRow()
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(

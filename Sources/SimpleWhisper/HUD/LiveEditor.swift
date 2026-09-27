@@ -2,15 +2,14 @@ import AppKit
 import SwiftUI
 
 /// The editable text area shown under the HUD capsule in Live typing mode.
-/// Dictated chunks are first inserted as a "⋯" placeholder at the caret and replaced once transcribed,
-/// so the user can keep moving the caret and typing while transcription runs.
+/// Dictated text appears at the caret: a chunk's spot is remembered as a position (no marker in the
+/// text), shown greyed while previewed and written normally once transcribed, so the user can keep
+/// moving the caret and typing while transcription runs.
 @MainActor
-final class LiveEditorController: NSObject, NSTextViewDelegate {
-    static let placeholderKey = NSAttributedString.Key("SimpleWhisperPlaceholder")
+final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
     static let minWidth: CGFloat = 320
     static let maxWidth: CGFloat = 560
     private static let inset = NSSize(width: 10, height: 8)
-    private static let placeholderGlyph = "⋯"
 
     let scrollView: NSScrollView
     let textView: NSTextView
@@ -40,6 +39,7 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         textView.font = .systemFont(ofSize: 14)
         textView.textContainerInset = Self.inset
         textView.delegate = self
+        textView.textStorage?.delegate = self
         applyColors()
     }
 
@@ -59,6 +59,7 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         defer { programmaticChange = false }
         textView.isEditable = true
         textView.string = ""
+        anchors = [:]
         textView.undoManager?.removeAllActions()
         textView.typingAttributes = normalAttributes
         updateSize()
@@ -69,6 +70,7 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         programmaticChange = true
         defer { programmaticChange = false }
         textView.isEditable = true
+        anchors = [:]
         textView.string = text
         textView.textStorage?.setAttributes(normalAttributes, range: NSRange(location: 0, length: (text as NSString).length))
         textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
@@ -80,69 +82,73 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         textView.window?.makeFirstResponder(textView)
     }
 
-    /// Editor text without pending placeholders.
+    /// Editor text without greyed previews that are still waiting for their final transcription.
     var text: String {
-        guard let storage = textView.textStorage else { return textView.string }
-        let result = NSMutableString(string: storage.string)
-        for range in placeholderRanges().reversed() { result.replaceCharacters(in: range, with: "") }
+        let result = NSMutableString(string: textView.string)
+        for range in anchors.values.sorted(by: { $0.location > $1.location }) where range.length > 0 {
+            result.replaceCharacters(in: range, with: "")
+        }
         return (result as String).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    var hasPendingChunks: Bool { !placeholderRanges().isEmpty }
+    var hasPendingChunks: Bool { !anchors.isEmpty }
 
-    /// Inserts a placeholder at the caret (replacing any selection) and returns its id.
+    /// Marks the caret as the spot where the next dictated chunk lands and returns its id.
+    /// Nothing is inserted; a selection is removed so the dictation replaces it.
     func insertPlaceholder() -> String {
         let id = UUID().uuidString
-        var attributes = normalAttributes
-        attributes[.foregroundColor] = inkColor.withAlphaComponent(0.45)
-        attributes[Self.placeholderKey] = id
-        let range = textView.selectedRange()
-        let before = (textView.string as NSString).substring(to: range.location)
-        let glyph = (before.last.map { !$0.isWhitespace } ?? false) ? " " + Self.placeholderGlyph : Self.placeholderGlyph
-        replace(range, with: NSAttributedString(string: glyph, attributes: attributes), caretAfter: true)
+        let selection = textView.selectedRange()
+        if selection.length > 0 {
+            replace(selection, with: NSAttributedString(string: ""), anchor: nil)
+        }
+        anchors[id] = NSRange(location: textView.selectedRange().location, length: 0)
         return id
     }
 
-    /// Replaces the placeholder with the transcribed chunk, fixing spacing and capitalisation.
+    /// Writes the final transcription at the chunk's spot, fixing spacing and capitalisation.
     func resolve(_ id: String, with chunk: String) {
-        guard let range = placeholderRange(id) else { return }
-        let storage = textView.string as NSString
-        let before = storage.substring(to: range.location)
-        let after = storage.substring(from: NSMaxRange(range))
-        let fitted = Self.fit(chunk, before: before, after: after)
-        replace(range, with: NSAttributedString(string: fitted, attributes: normalAttributes), caretAfter: false)
+        guard let range = anchors.removeValue(forKey: id) else { return }
+        let fitted = fitted(chunk, replacing: range)
+        guard range.length > 0 || !fitted.isEmpty else { return }
+        replace(range, with: NSAttributedString(string: fitted, attributes: normalAttributes), anchor: nil)
     }
 
     func drop(_ id: String) { resolve(id, with: "") }
 
-    /// Shows a provisional transcription inside the placeholder (greyed, still replaceable).
+    /// Shows a provisional transcription at the chunk's spot (greyed, replaced by later previews).
     func preview(_ id: String, with chunk: String) {
-        guard let range = placeholderRange(id) else { return }
-        let storage = textView.string as NSString
-        let before = storage.substring(to: range.location)
-        let after = storage.substring(from: NSMaxRange(range))
-        var fitted = Self.fit(chunk, before: before, after: after)
-        if fitted.trimmingCharacters(in: .whitespaces).isEmpty { fitted = (before.last.map { !$0.isWhitespace } ?? false) ? " " + Self.placeholderGlyph : Self.placeholderGlyph }
+        guard let range = anchors[id] else { return }
+        let fitted = fitted(chunk, replacing: range)
         var attributes = normalAttributes
         attributes[.foregroundColor] = inkColor.withAlphaComponent(0.5)
-        attributes[Self.placeholderKey] = id
-        replace(range, with: NSAttributedString(string: fitted, attributes: attributes), caretAfter: false)
+        replace(range, with: NSAttributedString(string: fitted, attributes: attributes), anchor: id)
+    }
+
+    private func fitted(_ chunk: String, replacing range: NSRange) -> String {
+        let storage = textView.string as NSString
+        return Self.fit(chunk, before: storage.substring(to: range.location), after: storage.substring(from: NSMaxRange(range)))
     }
 
     // MARK: Text surgery
 
-    private func replace(_ range: NSRange, with string: NSAttributedString, caretAfter: Bool) {
+    /// Where each pending chunk's text goes: length 0 until its first preview, then the preview's range.
+    private var anchors: [String: NSRange] = [:]
+    /// The anchor being rewritten by `replace`, which the edit tracking below must leave alone.
+    private var rewritingAnchor: String?
+
+    private func replace(_ range: NSRange, with string: NSAttributedString, anchor id: String?) {
         guard let storage = textView.textStorage else { return }
         programmaticChange = true
-        defer { programmaticChange = false }
+        rewritingAnchor = id
+        defer { programmaticChange = false; rewritingAnchor = nil }
         let selection = textView.selectedRange()
         guard textView.shouldChangeText(in: range, replacementString: string.string) else { return }
         storage.replaceCharacters(in: range, with: string)
         textView.didChangeText()
+        if let id { anchors[id] = NSRange(location: range.location, length: string.length) }
         let delta = string.length - range.length
-        if caretAfter {
-            textView.setSelectedRange(NSRange(location: range.location + string.length, length: 0))
-        } else if selection.location >= NSMaxRange(range) {
+        // A caret at (or after) the chunk's spot moves along, so text appears where the caret is.
+        if selection.location >= NSMaxRange(range) {
             textView.setSelectedRange(NSRange(location: selection.location + delta, length: selection.length))
         } else if selection.location > range.location {
             textView.setSelectedRange(NSRange(location: range.location + string.length, length: 0))
@@ -152,22 +158,25 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         updateSize()
     }
 
-    private func placeholderRanges() -> [NSRange] {
-        guard let storage = textView.textStorage else { return [] }
-        var ranges: [NSRange] = []
-        storage.enumerateAttribute(Self.placeholderKey, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
-            if value != nil { ranges.append(range) }
+    /// Keeps the pending spots in place while the text before them changes (typing, pasting, other chunks).
+    nonisolated func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+                                 range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters) else { return }
+        MainActor.assumeIsolated {
+            let start = editedRange.location
+            let oldEnd = NSMaxRange(editedRange) - delta
+            for (id, anchor) in anchors where id != rewritingAnchor {
+                if oldEnd <= anchor.location, !(anchor.length == 0 && start == anchor.location && oldEnd == start) {
+                    anchors[id] = NSRange(location: max(0, anchor.location + delta), length: anchor.length)
+                } else if start >= NSMaxRange(anchor) {
+                    continue
+                } else {
+                    // An edit inside a preview: keep the spot, resize it with the edit.
+                    let location = min(anchor.location, start)
+                    anchors[id] = NSRange(location: location, length: max(0, NSMaxRange(anchor) + delta - location))
+                }
+            }
         }
-        return ranges
-    }
-
-    private func placeholderRange(_ id: String) -> NSRange? {
-        guard let storage = textView.textStorage else { return nil }
-        var found: NSRange?
-        storage.enumerateAttribute(Self.placeholderKey, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
-            if value as? String == id { found = range; stop.pointee = true }
-        }
-        return found
     }
 
     /// Adds the spaces and case a chunk needs to read naturally between `before` and `after`.
@@ -217,8 +226,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
-        // AppKit copies the attributes of the character before the caret; right after a placeholder
-        // that would turn typed or pasted text into part of the placeholder.
+        // AppKit copies the attributes of the character before the caret; right after a greyed preview
+        // typed or pasted text would come out grey.
         textView.typingAttributes = normalAttributes
         if !programmaticChange { onUserEdit() }
     }
