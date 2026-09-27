@@ -115,14 +115,6 @@ final class AppSettings {
         }
     }
 
-    /// Entries for the quick language switch in the menu bar.
-    var languageMenuOptions: [LanguageMode] {
-        var options: [LanguageMode] = [.auto(allowed: selectedLanguages), .any]
-        options += selectedLanguages.map { LanguageMode.fixed($0) }
-        if !options.contains(languageMode) { options.append(languageMode) }
-        return options
-    }
-
     init() {
         engineKind = EngineKind(rawValue: defaults.string(forKey: "engineKind") ?? "") ?? .whisperSmall
         if let data = defaults.data(forKey: "languageModeJSON"), let mode = try? JSONDecoder().decode(LanguageMode.self, from: data) {
@@ -158,7 +150,7 @@ final class AppSettings {
         commandProvider = PromptProvider(rawValue: defaults.string(forKey: "commandProvider") ?? "") ?? .claudeCode
         markdownWhenNotPasting = defaults.object(forKey: "markdownWhenNotPasting") as? Bool ?? true
         allowWebAccess = defaults.object(forKey: "allowWebAccess") as? Bool ?? false
-        selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["pl", "en"]
+        selectedLanguages = defaults.stringArray(forKey: "selectedLanguages") ?? ["en"]
 
         // Before the Claude Code provider existed, "shell" with a claude template meant Claude Code.
         // (didSet does not run inside init, so persist the migrated values explicitly.)

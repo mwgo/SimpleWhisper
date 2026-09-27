@@ -18,7 +18,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   post-processing prompt.
 - **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
   Apple Speech. Models download on first use.
-- **Language**: auto-detect among a configurable set of languages (default Polish + English; any of
+- **Language**: auto-detect among a configurable set of languages (default English; any of
   Whisper's 99 languages can be added), or a fixed language, or auto-detect anything. Mixed sentences are fine.
 - **Vocabulary**: words the models tend to get wrong plus aliases that are
   always corrected in the final text.
@@ -92,7 +92,7 @@ Generate test audio with the system voices: `say -v Zosia "Dzisiaj testuję enov
 - **Apple Speech**: English uses the new `SpeechTranscriber`; Polish is not supported by it, so the
   older `DictationTranscriber` is used (lower quality). Whisper Large v3 Turbo or Parakeet v3 give
   much better Polish.
-- Language auto-detection is restricted to the selected languages (default Polish/English) so short
+- Language auto-detection is restricted to the selected languages (default English) so short
   phrases are not mistaken for a similar language. Apple Speech supports only some languages
   (see `--apple-locales`); unsupported ones are skipped.
 - Whisper decodes in the detected dominant language; English identifiers inside a Polish sentence are kept.

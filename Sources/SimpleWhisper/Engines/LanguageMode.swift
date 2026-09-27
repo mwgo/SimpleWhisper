@@ -7,7 +7,7 @@ enum LanguageMode: Codable, Equatable, Hashable {
     /// Always decode in this language.
     case fixed(String)
 
-    static let `default` = LanguageMode.auto(allowed: ["pl", "en"])
+    static let `default` = LanguageMode.auto(allowed: ["en"])
     static let any = LanguageMode.auto(allowed: [])
 
     var title: String {
@@ -48,7 +48,8 @@ enum LanguageMode: Codable, Equatable, Hashable {
     /// Parses CLI / legacy values: "auto", "any", "pl", "pl,en", old enum names.
     static func parse(_ raw: String) -> LanguageMode? {
         switch raw {
-        case "autoPolishEnglish", "auto": return .default
+        case "auto": return .default
+        case "autoPolishEnglish": return .auto(allowed: ["pl", "en"])
         case "autoAny", "any": return .any
         case "polish": return .fixed("pl")
         case "english": return .fixed("en")
