@@ -36,7 +36,7 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   “kropka”/“period”, “znak zapytania”, “wykrzyknik”, “dwukropek”, “średnik”, “myślnik”, “cudzysłów”,
   “nawias otwarty/zamknięty”, “nowy akapit”/“new paragraph”. Marks are placed with proper spacing,
   the next sentence is capitalised, and punctuation the model already inserted is merged rather than
-  doubled. One switch (Settings › Macros or the menu bar) turns it off when those words are meant literally.
+  doubled. One switch in Settings › Macros turns it off when those words are meant literally.
 - **Live typing** (Settings › General › Output, or the menu bar): an editor opens under the HUD and
   fills with text at every pause (a “⋯” marks where a chunk will land). Click anywhere to move the
   caret and keep dictating there, select text to replace it, or edit with the keyboard; the editor

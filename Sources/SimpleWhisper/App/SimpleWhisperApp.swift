@@ -88,7 +88,6 @@ struct MenuContent: View {
         Picker("Model", selection: Binding(get: { settings.engineKind }, set: { settings.engineKind = $0; Task { await controller.loadModel() } })) {
             ForEach(EngineKind.allCases) { kind in Text(kind.title).tag(kind) }
         }
-        Toggle("Spoken punctuation", isOn: Binding(get: { settings.spokenPunctuationEnabled }, set: { settings.spokenPunctuationEnabled = $0 }))
         Toggle("Live typing", isOn: Binding(get: { settings.liveTypingEnabled }, set: { settings.liveTypingEnabled = $0 }))
         Picker("Prompt", selection: Binding<UUID?>(get: { settings.selectedPromptID }, set: { settings.selectedPromptID = $0 })) {
             Text("Plain text (no prompt)").tag(UUID?.none)
