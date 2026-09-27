@@ -146,6 +146,20 @@ struct GeneralSettingsView: View {
                 Text("Select text in your editor, start dictation, say what to do with it (e.g. “convert to markdown”), then click the round ▶ button on the right of the HUD or press Control (works while holding fn or after a short fn press). The selection is sent to the command-mode AI command from the AI tab together with your instruction, and the result replaces the selection. With nothing selected, the dictation is a direct question to the assistant and the answer opens as a Markdown document.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Updates") {
+                let updater = controller.updater
+                Toggle("Automatically install updates from GitHub", isOn: Binding(get: { settings.autoUpdateEnabled }, set: { settings.autoUpdateEnabled = $0 }))
+                HStack {
+                    Button(updater.isBusy ? "Checking…" : "Check now") { Task { await updater.check(install: settings.autoUpdateEnabled) } }
+                        .disabled(updater.isBusy)
+                    Text(updater.status).font(.caption).foregroundStyle(.secondary)
+                    if updater.availableVersion != nil, let page = updater.releasePage {
+                        Link("Release page", destination: page).font(.caption)
+                    }
+                }
+                Text("New releases are checked once a day. When one is found and no dictation has run for a minute, it is downloaded, verified and installed in place, and SimpleWhisper restarts.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Startup") {
                 Toggle("Launch SimpleWhisper at login", isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.setEnabled($0) }))
                 HStack {

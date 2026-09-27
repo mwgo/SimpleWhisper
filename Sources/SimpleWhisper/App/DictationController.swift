@@ -22,6 +22,8 @@ final class DictationController: HotkeyMonitorDelegate {
     let state = AppState()
     let settings = AppSettings()
     let store = DataStore()
+    private(set) lazy var updater = Updater(settings: settings)
+    private var lastRecordingStart = Date.distantPast
 
     private let recorder = AudioRecorder()
     private let paster = TextPaster()
@@ -93,6 +95,28 @@ final class DictationController: HotkeyMonitorDelegate {
         if !Permissions.inputMonitoringGranted { Permissions.requestInputMonitoring() }
         startHotkey()
         Task { await loadModel() }
+        updater.isIdle = { [weak self] in
+            guard let self else { return true }
+            return self.state.phase == .idle && Date().timeIntervalSince(self.lastRecordingStart) > 60
+        }
+        updater.willRelaunch = { [weak self] version in self?.hud.flash("Updating to \(version)…", duration: .seconds(2)) }
+        updater.start()
+    }
+
+    /// Menu bar "Check for Updates…": checks now and reports the result in an alert.
+    func checkForUpdatesInteractively() {
+        Task {
+            await updater.check(install: settings.autoUpdateEnabled)
+            let alert = NSAlert()
+            alert.messageText = "SimpleWhisper \(Updater.currentVersion)"
+            alert.informativeText = updater.status
+            alert.addButton(withTitle: "OK")
+            if updater.availableVersion != nil, updater.releasePage != nil { alert.addButton(withTitle: "Open Release Page") }
+            NSApp.activate()
+            if alert.runModal() == .alertSecondButtonReturn, let page = updater.releasePage {
+                NSWorkspace.shared.open(page)
+            }
+        }
     }
 
     func startHotkey() {
@@ -233,6 +257,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     func startRecording() {
         guard state.phase == .idle else { return }
+        lastRecordingStart = Date()
         state.lastError = nil
         capturedClipboard = NSPasteboard.general.string(forType: .string)
         paster.rememberTarget()

@@ -23,6 +23,10 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   speech is dropped; afterwards phrases models invent on silence (“Dziękuję.”, “Thank you.”,
   “Napisy stworzone przez społeczność Amara.org”…) are removed, the ambiguous ones only where the
   audio under them is not speech.
+- **Automatic updates** (off by default, Settings › General › Updates): once a day the app looks for
+  a newer GitHub release; when one is found and no dictation has run for a minute, it downloads the zip,
+  checks the bundle identifier, version and signature, replaces itself in place and restarts.
+  “Check for Updates…” in the menu bar checks right away.
 - **Gemini API (cloud, optional)**: sends the recording to Google's Gemini API
   (default model `gemini-2.5-flash`). Needs an API key from aistudio.google.com, entered in
   Settings › General; the vocabulary list is passed in the instructions.

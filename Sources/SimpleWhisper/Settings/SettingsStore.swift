@@ -35,6 +35,10 @@ final class AppSettings {
     var liveTypingEnabled: Bool {
         didSet { defaults.set(liveTypingEnabled, forKey: "liveTypingEnabled") }
     }
+    /// Install new GitHub releases automatically (checked at launch and every 6 hours).
+    var autoUpdateEnabled: Bool {
+        didSet { defaults.set(autoUpdateEnabled, forKey: "autoUpdateEnabled") }
+    }
     /// Silence (VAD) and hallucination filters around every transcription.
     var noiseFilterEnabled: Bool {
         didSet { defaults.set(noiseFilterEnabled, forKey: "noiseFilterEnabled") }
@@ -142,6 +146,7 @@ final class AppSettings {
         soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
         liveTypingEnabled = defaults.bool(forKey: "liveTypingEnabled")
         noiseFilterEnabled = defaults.object(forKey: "noiseFilterEnabled") as? Bool ?? true
+        autoUpdateEnabled = defaults.bool(forKey: "autoUpdateEnabled")
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false

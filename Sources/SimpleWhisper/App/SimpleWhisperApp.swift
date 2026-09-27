@@ -99,6 +99,7 @@ struct MenuContent: View {
         }
         Divider()
 
+        Button("Check for Updates…") { controller.checkForUpdatesInteractively() }
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")
         Button("Quit SimpleWhisper") { NSApplication.shared.terminate(nil) }
