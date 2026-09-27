@@ -205,7 +205,29 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
+        // AppKit copies the attributes of the character before the caret; right after a placeholder
+        // that would turn typed or pasted text into part of the placeholder.
+        textView.typingAttributes = normalAttributes
         if !programmaticChange { onUserEdit() }
+    }
+
+    /// Inserts the clipboard text at the caret (replacing a selection), like ⌘V.
+    func pasteClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { NSSound.beep(); return }
+        focus()
+        let range = textView.selectedRange()
+        let storage = textView.string as NSString
+        var inserted = text
+        if let last = storage.substring(to: range.location).last, !last.isWhitespace, last != "(",
+           let first = text.first, !first.isWhitespace, !",.;:!?)".contains(first) {
+            inserted = " " + inserted
+        }
+        if let next = storage.substring(from: NSMaxRange(range)).first, !next.isWhitespace, !",.;:!?)".contains(next),
+           let end = text.last, !end.isWhitespace {
+            inserted += " "
+        }
+        textView.typingAttributes = normalAttributes
+        textView.insertText(inserted, replacementRange: range)
     }
 
     private func updateSize() {

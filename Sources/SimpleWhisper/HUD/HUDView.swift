@@ -62,19 +62,11 @@ struct HUDView: View {
     static let ink = Color(red: 0.03, green: 0.18, blue: 0.10)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            capsule
+        Group {
             if let editor = model.liveEditor {
-                LiveEditorView(controller: editor)
-                    .frame(width: model.editorSize.width, height: model.editorSize.height)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(model.theme.background)
-                            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
-                    )
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(model.theme.border, lineWidth: 1))
-                    .scaleEffect(x: dropScale, y: 1, anchor: anchor)
-                    .opacity(dropOpacity)
+                liveCard(editor)
+            } else {
+                capsule
             }
         }
         .padding(Self.outerPadding)
@@ -83,7 +75,52 @@ struct HUDView: View {
         .onChange(of: model.dismissal) { _, _ in playDismissAnimation() }
     }
 
-    private var capsule: some View {
+    private var isBusy: Bool { model.stage == .transcribing || model.stage == .processing }
+
+    /// Live typing: status row and editor in one card.
+    private func liveCard(_ editor: LiveEditorController) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                statusRow
+                    .fixedSize()
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onTap)
+                Spacer(minLength: 8)
+                Button { editor.pasteClipboard() } label: {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(model.theme.ink)
+                        .frame(width: 24, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.ink.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Paste the clipboard at the caret")
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 9)
+            .padding(.bottom, 6)
+            Rectangle()
+                .fill(model.theme.border)
+                .frame(height: 1)
+                .padding(.horizontal, 12)
+            LiveEditorView(controller: editor)
+                .frame(width: model.editorSize.width, height: model.editorSize.height)
+        }
+        .background(shape.fill(model.theme.background).shadow(color: .black.opacity(0.18), radius: 6, y: 2))
+        .overlay {
+            if isBusy {
+                RainbowBorder(shape: shape)
+            } else {
+                shape.strokeBorder(model.theme.border, lineWidth: 1)
+            }
+        }
+        .scaleEffect(x: dropScale, y: 0.9 + 0.1 * dropScale, anchor: anchor)
+        .opacity(dropOpacity)
+    }
+
+    private var statusRow: some View {
         HStack(spacing: 10) {
             indicator
                 .frame(width: 34, height: 18)
@@ -122,6 +159,10 @@ struct HUDView: View {
             }
         }
         .foregroundStyle(model.theme.ink)
+    }
+
+    private var capsule: some View {
+        statusRow
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(
@@ -130,8 +171,8 @@ struct HUDView: View {
                 .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
         )
         .overlay {
-            if model.stage == .transcribing || model.stage == .processing {
-                RainbowBorder()
+            if isBusy {
+                RainbowBorder(shape: Capsule())
             } else {
                 Capsule().strokeBorder(model.theme.border, lineWidth: 1)
             }
@@ -273,25 +314,27 @@ private struct SparkleIndicator: View {
 
 
 /// Slowly rotating multi-colour ring shown while the speech model or the AI is working.
-private struct RainbowBorder: View {
-    private static let colors: [Color] = [
+private let rainbowColors: [Color] = [
         Color(red: 1.00, green: 0.35, blue: 0.35), Color(red: 1.00, green: 0.70, blue: 0.20),
         Color(red: 0.55, green: 0.90, blue: 0.35), Color(red: 0.25, green: 0.80, blue: 0.95),
         Color(red: 0.45, green: 0.45, blue: 1.00), Color(red: 0.90, green: 0.40, blue: 0.95),
         Color(red: 1.00, green: 0.35, blue: 0.35),
     ]
 
+private struct RainbowBorder<S: InsettableShape>: View {
+    let shape: S
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let seconds = context.date.timeIntervalSinceReferenceDate
             let angle = Angle.degrees((seconds * 180).truncatingRemainder(dividingBy: 360))   // one lap every 2 s
-            let gradient = AngularGradient(colors: Self.colors, center: .center, angle: angle)
+            let gradient = AngularGradient(colors: rainbowColors, center: .center, angle: angle)
             ZStack {
-                Capsule()
+                shape
                     .strokeBorder(gradient, lineWidth: 2.5)
                     .blur(radius: 3)
                     .opacity(0.8)
-                Capsule()
+                shape
                     .strokeBorder(gradient, lineWidth: 1.8)
             }
         }
