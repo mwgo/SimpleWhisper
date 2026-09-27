@@ -64,6 +64,18 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
         updateSize()
     }
 
+    /// Replaces the whole content (result card), caret at the end.
+    func setText(_ text: String) {
+        programmaticChange = true
+        defer { programmaticChange = false }
+        textView.isEditable = true
+        textView.string = text
+        textView.textStorage?.setAttributes(normalAttributes, range: NSRange(location: 0, length: (text as NSString).length))
+        textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        textView.typingAttributes = normalAttributes
+        updateSize()
+    }
+
     func focus() {
         textView.window?.makeFirstResponder(textView)
     }

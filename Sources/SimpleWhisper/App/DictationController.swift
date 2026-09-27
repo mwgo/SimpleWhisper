@@ -367,8 +367,8 @@ final class DictationController: HotkeyMonitorDelegate {
             state.lastLanguage = transcription.detectedLanguage
             state.phase = .idle
             recordHistory(HistoryEntry(date: Date(), kind: .command, text: result, instruction: instruction, language: transcription.detectedLanguage))
-            hud.hide()
             if isAssistant {
+                hud.hide()
                 resultWindow.show(text: result)
             } else {
                 await deliver(result)
@@ -393,13 +393,23 @@ final class DictationController: HotkeyMonitorDelegate {
 
     /// Pastes into the active text field, or, when nothing can accept a paste, shows the text in a window
     /// (rendered as Markdown when it looks like Markdown). The clipboard is left alone.
-    private func deliver(_ text: String, canPaste: Bool? = nil) async {
+    /// Hides the HUD (or flashes `notice`) and pastes; when there is nothing to paste into, the HUD
+    /// becomes the result card instead, so it must not be hidden first.
+    private func deliver(_ text: String, canPaste: Bool? = nil, animatedHide: Bool = true, notice: String? = nil) async {
         if canPaste ?? PasteTargetProbe.canPasteIntoFocusedElement() {
+            if let notice {
+                hud.flash(notice, duration: .seconds(2))
+            } else {
+                hud.hide(animated: animatedHide)
+            }
             await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
-        } else {
-            DebugLog.write("No editable field focused; showing result window")
+        } else if MarkdownRenderer.looksLikeMarkdown(text) {
+            DebugLog.write("No editable field focused; showing Markdown result window")
             hud.hide()
             resultWindow.show(text: text)
+        } else {
+            DebugLog.write("No editable field focused; showing the result card")
+            hud.showResult(text, editor: liveEditor)
         }
     }
 
@@ -620,8 +630,7 @@ final class DictationController: HotkeyMonitorDelegate {
         state.lastLanguage = liveLanguage
         state.phase = .idle
         recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
-        hud.hide(animated: false)
-        await deliver(text, canPaste: pasteTargetAvailable)
+        await deliver(text, canPaste: pasteTargetAvailable, animatedHide: false)
         endActivity()
     }
 
@@ -672,12 +681,7 @@ final class DictationController: HotkeyMonitorDelegate {
             state.phase = .idle
             recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: transcription.detectedLanguage))
 
-            if expansion.clipboardWasEmpty {
-                hud.flash("Clipboard was empty", duration: .seconds(2))
-            } else {
-                hud.hide()
-            }
-            await deliver(text)
+            await deliver(text, notice: expansion.clipboardWasEmpty ? "Clipboard was empty" : nil)
             endActivity()
         } catch is CancellationError {
             if state.phase != .idle {

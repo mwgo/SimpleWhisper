@@ -33,6 +33,8 @@ final class HUDModel {
     /// Live typing: editor shown under the capsule, and its current preferred size.
     var liveEditor: LiveEditorController?
     var editorSize: CGSize = .zero
+    /// The card shows a finished text that could not be pasted: Copy / Close instead of the status.
+    var resultMode = false
 
     static let barCount = 9
 
@@ -50,6 +52,8 @@ struct HUDView: View {
     var model: HUDModel
     var onTap: () -> Void
     var onCommand: () -> Void = {}
+    var onCopyResult: () -> Void = {}
+    var onCloseResult: () -> Void = {}
     /// Transparent margin so the ripple can extend beyond the capsule.
     static let outerPadding: CGFloat = 14
     @State private var dropScale: CGFloat = 0.4
@@ -82,21 +86,18 @@ struct HUDView: View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                statusRow
-                    .fixedSize()
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onTap)
-                Spacer(minLength: 8)
-                Button { editor.pasteClipboard() } label: {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(model.theme.ink)
-                        .frame(width: 24, height: 22)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.ink.opacity(0.12)))
+                if model.resultMode {
+                    Spacer(minLength: 8)
+                    cardButton("Copy", systemImage: "doc.on.doc", help: "Copy the text and close", action: onCopyResult)
+                    cardButton("Close", systemImage: "xmark", help: "Close (Esc)", action: onCloseResult)
+                } else {
+                    statusRow
+                        .fixedSize()
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onTap)
+                    Spacer(minLength: 8)
+                    cardButton(nil, systemImage: "doc.on.clipboard", help: "Paste the clipboard at the caret") { editor.pasteClipboard() }
                 }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help("Paste the clipboard at the caret")
             }
             .padding(.horizontal, 14)
             .padding(.top, 9)
@@ -118,6 +119,22 @@ struct HUDView: View {
         }
         .scaleEffect(x: dropScale, y: 0.9 + 0.1 * dropScale, anchor: anchor)
         .opacity(dropOpacity)
+    }
+
+    private func cardButton(_ title: String?, systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
+                if let title { Text(title).font(.system(size: 12, weight: .semibold, design: .rounded)) }
+            }
+            .foregroundStyle(model.theme.ink)
+            .padding(.horizontal, title == nil ? 0 : 8)
+            .frame(minWidth: 24, minHeight: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.ink.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(help)
     }
 
     private var statusRow: some View {

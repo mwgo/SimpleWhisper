@@ -5,7 +5,17 @@ import SwiftUI
 /// Being non-activating, it takes the keyboard without making SimpleWhisper the active app.
 final class HUDPanel: NSPanel {
     var acceptsKey = false
+    /// Esc while the result card is shown (the dictation hotkey tap only handles Esc during dictation).
+    var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { acceptsKey }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == 53, let onEscape {
+            onEscape()
+            return
+        }
+        super.sendEvent(event)
+    }
 }
 
 /// Small floating capsule shown near the text caret while dictation is active.
@@ -57,7 +67,9 @@ final class HUDWindowController: NSObject {
         hostingView.rootView = HUDView(
             model: model,
             onTap: { [weak self] in self?.showPromptMenu() },
-            onCommand: { [weak self] in self?.onRunCommand() }
+            onCommand: { [weak self] in self?.onRunCommand() },
+            onCopyResult: { [weak self] in self?.copyResult() },
+            onCloseResult: { [weak self] in self?.hide() }
         )
         panel.contentView = hostingView
     }
@@ -67,16 +79,9 @@ final class HUDWindowController: NSObject {
         anchor = CaretLocator.anchor(placement: liveEditor != nil && placement == .hidden ? .nearCaret : placement)
         model.showsCommandButton = commandButton
         model.resetLevels()
-        model.liveEditor = liveEditor
-        panel.acceptsKey = liveEditor != nil
-        if let liveEditor {
-            liveEditor.inkColor = NSColor(model.theme.ink)
-            model.editorSize = liveEditor.size
-            liveEditor.onSizeChange = { [weak self] size in
-                self?.model.editorSize = size
-                DispatchQueue.main.async { self?.layout() }
-            }
-        }
+        model.resultMode = false
+        panel.onEscape = nil
+        attach(liveEditor)
         model.appearance += 1
         update(text: text, detail: detail, stage: stage)
         if liveEditor != nil {
@@ -85,6 +90,48 @@ final class HUDWindowController: NSObject {
         } else if placement != .hidden {
             panel.orderFrontRegardless()
         }
+    }
+
+    private func attach(_ liveEditor: LiveEditorController?) {
+        model.liveEditor = liveEditor
+        panel.acceptsKey = liveEditor != nil
+        guard let liveEditor else { return }
+        liveEditor.inkColor = NSColor(model.theme.ink)
+        model.editorSize = liveEditor.size
+        liveEditor.onSizeChange = { [weak self] size in
+            self?.model.editorSize = size
+            DispatchQueue.main.async { self?.layout() }
+        }
+    }
+
+    /// Shows a finished text that could not be pasted in the editor card, with Copy and Close.
+    /// Reuses the live card in place when it is open; otherwise opens it at the usual anchor.
+    func showResult(_ text: String, editor: LiveEditorController) {
+        hideTask?.cancel()
+        hideTask = nil
+        let wasShowingEditor = panel.isVisible && model.liveEditor === editor
+        if !wasShowingEditor {
+            anchor = CaretLocator.anchor(placement: placement == .hidden ? .nearCaret : placement)
+            model.appearance += 1
+        }
+        attach(editor)
+        editor.setText(text)
+        model.editorSize = editor.size
+        model.resultMode = true
+        model.stage = .message
+        panel.onEscape = { [weak self] in self?.hide() }
+        layout()
+        DispatchQueue.main.async { [weak self] in self?.layout() }
+        panel.makeKeyAndOrderFront(nil)
+        editor.focus()
+    }
+
+    private func copyResult() {
+        guard let editor = model.liveEditor else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(editor.text, forType: .string)
+        hide()
     }
 
     func update(text: String, detail: String? = nil, stage: HUDStage) {
@@ -143,7 +190,9 @@ final class HUDWindowController: NSObject {
     private func orderOut() {
         panel.orderOut(nil)
         panel.acceptsKey = false
+        panel.onEscape = nil
         model.liveEditor = nil
+        model.resultMode = false
     }
 
     /// Human-readable description of the last anchor, for the menu bar status.
