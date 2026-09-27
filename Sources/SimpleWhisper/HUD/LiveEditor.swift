@@ -264,20 +264,33 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         textView.insertText(inserted, replacementRange: range)
     }
 
+    /// Undoes a scroll made while the frame was still smaller than the text, once everything fits.
+    func scrollToTopIfFits() {
+        let clip = scrollView.contentView
+        guard clip.bounds.origin.y != 0, textView.frame.height <= clip.bounds.height + 1 else { return }
+        clip.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(clip)
+    }
+
     private func updateSize() {
         let font = textView.font ?? .systemFont(ofSize: 14)
         let lines = textView.string.components(separatedBy: "\n")
         let longest = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         let width = min(max(ceil(longest) + Self.inset.width * 2 + 24, Self.minWidth), Self.maxWidth)
-        textView.textContainer?.containerSize = NSSize(width: width - Self.inset.width * 2, height: .greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = true
-        var used: CGFloat = 18
-        if let container = textView.textContainer, let manager = textView.layoutManager {
-            manager.ensureLayout(for: container)
-            used = max(manager.usedRect(for: container).height, 18)
-        }
+        // Measure at the target width, not the text view's current one (it only resizes after the
+        // HUD's layout pass, so a fresh card would otherwise be measured as a single long line).
+        let padding = (textView.textContainer?.lineFragmentPadding ?? 5) * 2
+        let measured = (textView.textStorage ?? NSTextStorage(string: textView.string)).boundingRect(
+            with: NSSize(width: width - Self.inset.width * 2 - padding, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
+        let trailingNewline = textView.string.hasSuffix("\n") ? (font.ascender - font.descender + font.leading) : 0
+        let used = max(ceil(measured.height + trailingNewline), 18)
         let screenHeight = (NSScreen.main?.visibleFrame.height ?? 800)
-        let height = min(ceil(used) + Self.inset.height * 2, screenHeight * 0.45)
+        let fullHeight = ceil(used) + Self.inset.height * 2
+        let height = min(fullHeight, screenHeight * 0.45)
+        if fullHeight <= height {
+            DispatchQueue.main.async { [weak self] in self?.scrollToTopIfFits() }
+        }
         let newSize = CGSize(width: width, height: height)
         guard abs(newSize.width - size.width) > 0.5 || abs(newSize.height - size.height) > 0.5 else { return }
         size = newSize

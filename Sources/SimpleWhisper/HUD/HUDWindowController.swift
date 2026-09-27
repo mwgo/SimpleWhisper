@@ -133,6 +133,9 @@ final class HUDWindowController: NSObject {
         DispatchQueue.main.async { [weak self] in self?.layout() }
         panel.makeKeyAndOrderFront(nil)
         editor.focus()
+        for delay in [0.05, 0.3] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { editor.scrollToTopIfFits() }
+        }
     }
 
     private func copyResult() {

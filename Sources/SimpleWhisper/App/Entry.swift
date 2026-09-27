@@ -60,26 +60,33 @@ enum HUDDemo {
         self.editor = editor
         controller.show(text: "Recording", detail: "Clean up", stage: .recording, liveEditor: editor)
         print("windowNumber=\(NSApp.windows.first { $0.isVisible }?.windowNumber ?? 0)")
-        let chunks = [
+        let chunks = ProcessInfo.processInfo.environment["SW_HUD_LIVE_TEXT"].map { $0.components(separatedBy: "|") } ?? [
             "Dzisiaj sprawdzam tryb pisania na żywo.",
             "Każde zdanie pojawia się osobno, a krótka pauza nie przerywa zdania.",
             "Tekst można poprawiać klawiaturą albo kliknąć w środek i dyktować dalej.",
             "Po zakończeniu całość trafia do edytora docelowego.",
             "Okno rośnie razem z tekstem, najpierw wszerz, potem w dół.",
         ]
+        // Like real use: the sentence grows greyed word by word (preview), then is committed.
         var index = 0
+        var words = 0
         var pending: String?
         var tick = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
             tick += 1
             controller.setLevel((sin(Double(tick) / 3) + 1) / 2 * 0.7 + Double.random(in: 0...0.3))
-            guard tick % 10 == 0 else { return }
-            if let id = pending {
-                editor.resolve(id, with: chunks[index % chunks.count])
-                index += 1
+            guard tick % 4 == 0 else { return }
+            let sentence = chunks[index % chunks.count].split(separator: " ")
+            let id = pending ?? editor.insertPlaceholder()
+            pending = id
+            words += 1
+            if words <= sentence.count {
+                editor.preview(id, with: sentence.prefix(words).joined(separator: " "))
+            } else if words == sentence.count + 3 {
+                editor.resolve(id, with: sentence.joined(separator: " "))
                 pending = nil
-            } else {
-                pending = editor.insertPlaceholder()
+                words = 0
+                index += 1
             }
         }
     }
@@ -98,6 +105,15 @@ enum HUDDemo {
             app.run()
             return
         }
+        if let text = ProcessInfo.processInfo.environment["SW_HUD_RESULT"] {
+            // The card shown when there is no text field to paste into.
+            let editor = LiveEditorController()
+            self.editor = editor
+            controller.showResult(text, editor: editor)
+            print("windowNumber=\(NSApp.windows.first { $0.isVisible }?.windowNumber ?? 0)")
+            app.run()
+            return
+        }
         let stages: [(String, String?, HUDStage)] = [
             ("Recording", "Clean up", .recording),
             ("Transcribing…", nil, .transcribing),
@@ -107,6 +123,7 @@ enum HUDDemo {
         var index = 0
         controller.show(text: stages[0].0, detail: stages[0].1, stage: stages[0].2, commandButton: true)
         print("hud: \(controller.anchorDebug ?? "-")")
+        print("windowNumber=\(NSApp.windows.first { $0.isVisible }?.windowNumber ?? 0)")
         var tick = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
             tick += 1
