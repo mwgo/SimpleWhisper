@@ -42,10 +42,28 @@ final class DictationController: HotkeyMonitorDelegate {
     /// Keeps the process out of App Nap while a dictation is in flight (otherwise the paste
     /// after a long AI step waits until the user clicks something).
     private var activityToken: NSObjectProtocol?
+    // Live typing session state.
+    private let liveEditor = LiveEditorController()
+    private var liveSession = false
+    /// Tail of the serial chunk-transcription chain (engines must not run concurrently).
+    private var liveQueue: Task<Void, Never>?
+    /// Bumped on every new session or cancel so late chunk results are ignored.
+    private var liveGeneration = 0
+    private var liveLanguage: String?
+    /// Placeholder of the utterance being spoken now (shows the provisional preview).
+    private var liveActiveID: String?
+    private var livePendingFinals = 0
+    private var livePreviewBusy = false
+    private var livePreviewLoop: Task<Void, Never>?
+    /// Latest preview per placeholder: a final result never replaces a longer preview.
+    private var livePreviews: [String: String] = [:]
 
     init() {
         recorder.onLevel = { [weak self] level in
             Task { @MainActor in self?.hud.setLevel(level) }
+        }
+        recorder.onSegmentsAvailable = { [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.drainLiveSegments() } }
         }
         hud.promptsProvider = { [weak self] in self?.store.prompts ?? [] }
         hud.selectedPromptID = { [weak self] in self?.settings.selectedPromptID }
@@ -154,6 +172,8 @@ final class DictationController: HotkeyMonitorDelegate {
 
     var isDictationActive: Bool { state.phase.isActive }
 
+    var isLiveEditing: Bool { liveSession && state.phase.isActive }
+
     func hotkeyToggle() {
         switch state.phase {
         case .idle: startRecording()
@@ -199,7 +219,7 @@ final class DictationController: HotkeyMonitorDelegate {
     }
 
     func hotkeyRunCommand() -> Bool {
-        guard state.phase == .recording, settings.commandModeEnabled else { return false }
+        guard state.phase == .recording, settings.commandModeEnabled, !liveSession else { return false }
         stopAndRunCommand()
         return true
     }
@@ -214,6 +234,19 @@ final class DictationController: HotkeyMonitorDelegate {
         capturedClipboard = NSPasteboard.general.string(forType: .string)
         paster.rememberTarget()
         pasteTargetAvailable = PasteTargetProbe.canPasteIntoFocusedElement()
+        liveSession = settings.liveTypingEnabled
+        recorder.segmentsEnabled = liveSession
+        if liveSession {
+            liveGeneration += 1
+            liveQueue = nil
+            liveLanguage = nil
+            liveActiveID = nil
+            livePreviews = [:]
+            livePendingFinals = 0
+            livePreviewBusy = false
+            liveEditor.reset()
+            LiveEditorController.properNouns = Set(store.vocabulary.flatMap { $0.text.split(separator: " ").map(String.init) }.filter { $0.first?.isUppercase == true })
+        }
         do {
             try recorder.start()
         } catch {
@@ -226,16 +259,23 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.placement = settings.hudPlacement
         hud.showsText = settings.hudShowsText
         hud.theme = settings.hudTheme
-        hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording, commandButton: settings.commandModeEnabled)
+        hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording,
+                 commandButton: settings.commandModeEnabled && !liveSession,
+                 liveEditor: liveSession ? liveEditor : nil)
         state.hudAnchor = hud.anchorDescription
         DebugLog.write("HUD \(hud.anchorDebug ?? "-")")
         if engines[settings.engineKind]?.isReady != true {
             Task { await loadModel() }
         }
+        if liveSession { startLivePreviewLoop() }
     }
 
     func stopAndTranscribe() {
         guard state.phase == .recording else { return }
+        if liveSession {
+            stopLiveTyping()
+            return
+        }
         let samples = recorder.stop()
         if settings.soundsEnabled { SoundPlayer.recordingStopped() }
         state.phase = .transcribing
@@ -247,7 +287,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     /// Command mode: the recording is an instruction to apply (via AI) to the text selected in the editor.
     func stopAndRunCommand() {
-        guard state.phase == .recording, settings.commandModeEnabled else { return }
+        guard state.phase == .recording, settings.commandModeEnabled, !liveSession else { return }
         let samples = recorder.stop()
         if settings.soundsEnabled { SoundPlayer.recordingStopped() }
         state.phase = .transcribing
@@ -350,8 +390,8 @@ final class DictationController: HotkeyMonitorDelegate {
 
     /// Pastes into the active text field, or, when nothing can accept a paste, shows the text in a window
     /// (rendered as Markdown when it looks like Markdown). The clipboard is left alone.
-    private func deliver(_ text: String) async {
-        if PasteTargetProbe.canPasteIntoFocusedElement() {
+    private func deliver(_ text: String, canPaste: Bool? = nil) async {
+        if canPaste ?? PasteTargetProbe.canPasteIntoFocusedElement() {
             await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
         } else {
             DebugLog.write("No editable field focused; showing result window")
@@ -399,7 +439,171 @@ final class DictationController: HotkeyMonitorDelegate {
         state.phase = .idle
         endActivity()
         if settings.soundsEnabled { SoundPlayer.recordingCancelled() }
+        if liveSession {
+            endLiveSession()
+            let text = liveEditor.text
+            if !text.isEmpty {
+                recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
+            }
+            hud.hide(reverse: true)
+            return
+        }
         hud.flash("Cancelled", reverseDismiss: true)
+    }
+
+    // MARK: Live typing
+
+    private func endLiveSession() {
+        liveGeneration += 1
+        liveQueue?.cancel()
+        liveQueue = nil
+        livePreviewLoop?.cancel()
+        livePreviewLoop = nil
+        liveActiveID = nil
+        liveSession = false
+        recorder.segmentsEnabled = false
+    }
+
+    private func drainLiveSegments() {
+        guard liveSession, state.phase == .recording else { return }
+        for range in recorder.takeSegments() {
+            enqueueLiveChunk(recorder.samples(in: range))
+        }
+    }
+
+    /// Commits a finished utterance: its placeholder (the one showing the preview, or a new one at the
+    /// caret) is filled with the final transcription.
+    private func enqueueLiveChunk(_ samples: [Float]) {
+        guard !samples.isEmpty else { return }
+        let id = liveActiveID ?? liveEditor.insertPlaceholder()
+        liveActiveID = nil
+        livePendingFinals += 1
+        let generation = liveGeneration
+        let previous = liveQueue
+        liveQueue = Task { [weak self] in
+            await previous?.value
+            guard let self, generation == self.liveGeneration else { return }
+            await self.transcribeLiveChunk(samples, placeholder: id, generation: generation, final: true)
+            self.livePendingFinals -= 1
+        }
+    }
+
+    /// About once a second, re-transcribes the utterance in progress and shows it greyed in the editor.
+    private func startLivePreviewLoop() {
+        livePreviewLoop?.cancel()
+        livePreviewLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(900))
+                guard let self, !Task.isCancelled, self.liveSession, self.state.phase == .recording else { return }
+                self.schedulePreview()
+            }
+        }
+    }
+
+    private func schedulePreview() {
+        // Cloud engines would be billed for every preview; finished utterances only.
+        guard settings.engineKind != .geminiAPI, livePendingFinals == 0, !livePreviewBusy else { return }
+        let open = recorder.openSegment()
+        guard open.hasSpeech, open.range.count >= 8_000 else { return }
+        let samples = recorder.samples(in: open.range)
+        let id = liveActiveID ?? liveEditor.insertPlaceholder()
+        liveActiveID = id
+        livePreviewBusy = true
+        let generation = liveGeneration
+        let previous = liveQueue
+        liveQueue = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { self.livePreviewBusy = false }
+            guard generation == self.liveGeneration else { return }
+            await self.transcribeLiveChunk(samples, placeholder: id, generation: generation, final: false)
+        }
+    }
+
+    private func transcribeLiveChunk(_ samples: [Float], placeholder id: String, generation: Int, final: Bool) async {
+        do {
+            let engine = try await ensureEngine(settings.engineKind)
+            let vocabulary = store.effectiveVocabulary(spokenPunctuation: settings.spokenPunctuationEnabled)
+            let macros = store.activeMacros(spokenPunctuation: settings.spokenPunctuationEnabled)
+            let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
+            guard generation == liveGeneration else { return }
+            var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
+            text = MacroExpander.stage1(text, macros: macros, clipboard: capturedClipboard).text
+            text = MacroExpander.stage2(text, macros: macros, clipboard: capturedClipboard)
+            guard final else {
+                // Ignore a preview that suddenly lost most of its text (a decoder hiccup).
+                if text.count >= Int(Double(livePreviews[id]?.count ?? 0) * 0.7) {
+                    livePreviews[id] = text
+                    liveEditor.preview(id, with: text)
+                }
+                return
+            }
+            if let preview = livePreviews.removeValue(forKey: id), Double(text.count) < Double(preview.count) * 0.6 {
+                DebugLog.write("Live chunk final (\(text.count) chars) shorter than its preview (\(preview.count)); keeping the preview")
+                text = preview
+            }
+            liveLanguage = transcription.detectedLanguage ?? liveLanguage
+            DebugLog.write("Live chunk \(String(format: "%.1f", Double(samples.count) / 16_000)) s → \(text.count) chars")
+            liveEditor.resolve(id, with: text)
+        } catch {
+            guard generation == liveGeneration, final else { return }
+            DebugLog.write("Live chunk failed: \(error)")
+            liveEditor.drop(id)
+        }
+    }
+
+    private func stopLiveTyping() {
+        livePreviewLoop?.cancel()
+        livePreviewLoop = nil
+        let (samples, segments) = recorder.stopWithSegments()
+        if settings.soundsEnabled { SoundPlayer.recordingStopped() }
+        state.phase = .transcribing
+        hud.update(text: "Transcribing…", detail: selectedPrompt?.name, stage: .transcribing)
+        for range in segments {
+            enqueueLiveChunk(Array(samples[range.clamped(to: 0..<samples.count)]))
+        }
+        if let orphan = liveActiveID {
+            // A preview whose utterance turned out to be noise: remove it once pending work is done.
+            liveActiveID = nil
+            let previous = liveQueue
+            liveQueue = Task { [weak self] in
+                await previous?.value
+                self?.liveEditor.drop(orphan)
+            }
+        }
+        let pending = liveQueue
+        pipelineTask = Task { [weak self] in
+            await pending?.value
+            await self?.finishLiveTyping(samples: samples)
+        }
+    }
+
+    private func finishLiveTyping(samples: [Float]) async {
+        guard !Task.isCancelled, liveSession, state.phase != .idle else { return }
+        if !samples.isEmpty { Self.saveLastRecording(samples) }
+        var text = liveEditor.text
+        guard !text.isEmpty else {
+            endLiveSession()
+            dismissQuietly(reason: .noSpeech)
+            return
+        }
+        do {
+            if let prompt = selectedPrompt {
+                liveEditor.textView.isEditable = false
+                text = try await applyPrompt(prompt, to: text, languageLabel: liveLanguage?.uppercased(), hasMacros: false)
+            }
+        } catch {
+            return   // cancelled; cancel() already cleaned up
+        }
+        guard state.phase != .idle else { return }
+        endLiveSession()
+        state.lastText = text
+        state.lastLanguage = liveLanguage
+        state.phase = .idle
+        recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
+        hud.hide(animated: false)
+        await deliver(text, canPaste: pasteTargetAvailable)
+        endActivity()
     }
 
     private func beginActivity() {
@@ -439,32 +643,7 @@ final class DictationController: HotkeyMonitorDelegate {
             let languageLabel = transcription.detectedLanguage?.uppercased()
 
             if let prompt = selectedPrompt {
-                state.phase = .processing(prompt.name)
-                hud.update(text: "Processing", detail: [languageLabel, prompt.name].compactMap { $0 }.joined(separator: " · "), stage: .processing)
-                let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: !expansion.usedMacroIDs.isEmpty, wantMarkdown: wantsMarkdown)
-                let detailBase = [languageLabel, prompt.name].compactMap { $0 }.joined(separator: " · ")
-                let ticker = Task { [weak self] in
-                    var seconds = 0
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: .seconds(1))
-                        guard !Task.isCancelled else { return }
-                        seconds += 1
-                        self?.hud.update(text: "Processing", detail: "\(detailBase) · \(seconds)s", stage: .processing)
-                    }
-                }
-                defer { ticker.cancel() }
-                do {
-                    text = try await makeProcessor(for: prompt).process(text: text, instructions: instructions)
-                    ticker.cancel()
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    ticker.cancel()
-                    state.lastError = error.localizedDescription
-                    DebugLog.write("AI failed (\(prompt.name), \(prompt.provider.rawValue), cmd=\(prompt.shellCommand)): \(error)")
-                    hud.update(text: "AI failed, pasting raw text", stage: .message)
-                    try? await Task.sleep(for: .milliseconds(900))
-                }
+                text = try await applyPrompt(prompt, to: text, languageLabel: languageLabel, hasMacros: !expansion.usedMacroIDs.isEmpty)
                 if Task.isCancelled && state.phase == .idle { return }
             }
 
@@ -493,6 +672,38 @@ final class DictationController: HotkeyMonitorDelegate {
         } catch {
             DebugLog.write("Pipeline error: \(error)")
             showError(error.localizedDescription)
+        }
+    }
+
+    /// Runs the prompt's AI step with an elapsed-seconds ticker. On AI failure the input is returned unchanged.
+    private func applyPrompt(_ prompt: NamedPrompt, to text: String, languageLabel: String?, hasMacros: Bool) async throws -> String {
+        state.phase = .processing(prompt.name)
+        let detailBase = [languageLabel, prompt.name].compactMap { $0 }.joined(separator: " · ")
+        hud.update(text: "Processing", detail: detailBase, stage: .processing)
+        let instructions = PromptComposer.instructions(for: prompt, vocabulary: store.vocabulary, hasMacros: hasMacros, wantMarkdown: wantsMarkdown)
+        let ticker = Task { [weak self] in
+            var seconds = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                seconds += 1
+                self?.hud.update(text: "Processing", detail: "\(detailBase) · \(seconds)s", stage: .processing)
+            }
+        }
+        defer { ticker.cancel() }
+        do {
+            let result = try await makeProcessor(for: prompt).process(text: text, instructions: instructions)
+            ticker.cancel()
+            return result
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            ticker.cancel()
+            state.lastError = error.localizedDescription
+            DebugLog.write("AI failed (\(prompt.name), \(prompt.provider.rawValue), cmd=\(prompt.shellCommand)): \(error)")
+            hud.update(text: "AI failed, pasting raw text", stage: .message)
+            try? await Task.sleep(for: .milliseconds(900))
+            return text
         }
     }
 

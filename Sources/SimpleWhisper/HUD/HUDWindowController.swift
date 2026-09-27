@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+/// Borderless panels cannot become key by default; the Live typing editor needs keyboard focus.
+/// Being non-activating, it takes the keyboard without making SimpleWhisper the active app.
+final class HUDPanel: NSPanel {
+    var acceptsKey = false
+    override var canBecomeKey: Bool { acceptsKey }
+}
+
 /// Small floating capsule shown near the text caret while dictation is active.
 @MainActor
 final class HUDWindowController: NSObject {
@@ -10,7 +17,7 @@ final class HUDWindowController: NSObject {
     var onSelectPrompt: (UUID?) -> Void = { _ in }
     var onRunCommand: () -> Void = {}
 
-    private let panel: NSPanel
+    private let panel: HUDPanel
     private let hostingView: NSHostingView<HUDView>
     private var hideTask: Task<Void, Never>?
     private var anchor: CaretLocator.Anchor?
@@ -27,7 +34,7 @@ final class HUDWindowController: NSObject {
     }
 
     override init() {
-        panel = NSPanel(
+        panel = HUDPanel(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 36),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -55,14 +62,29 @@ final class HUDWindowController: NSObject {
         panel.contentView = hostingView
     }
 
-    func show(text: String, detail: String? = nil, stage: HUDStage, commandButton: Bool = false) {
+    func show(text: String, detail: String? = nil, stage: HUDStage, commandButton: Bool = false, liveEditor: LiveEditorController? = nil) {
         hideTask?.cancel()
-        anchor = CaretLocator.anchor(placement: placement)
+        anchor = CaretLocator.anchor(placement: liveEditor != nil && placement == .hidden ? .nearCaret : placement)
         model.showsCommandButton = commandButton
         model.resetLevels()
+        model.liveEditor = liveEditor
+        panel.acceptsKey = liveEditor != nil
+        if let liveEditor {
+            liveEditor.inkColor = NSColor(model.theme.ink)
+            model.editorSize = liveEditor.size
+            liveEditor.onSizeChange = { [weak self] size in
+                self?.model.editorSize = size
+                DispatchQueue.main.async { self?.layout() }
+            }
+        }
         model.appearance += 1
         update(text: text, detail: detail, stage: stage)
-        if placement != .hidden { panel.orderFrontRegardless() }
+        if liveEditor != nil {
+            panel.makeKeyAndOrderFront(nil)
+            liveEditor?.focus()
+        } else if placement != .hidden {
+            panel.orderFrontRegardless()
+        }
     }
 
     func update(text: String, detail: String? = nil, stage: HUDStage) {
@@ -105,7 +127,7 @@ final class HUDWindowController: NSObject {
         hideTask?.cancel()
         hideTask = nil
         guard animated, panel.isVisible else {
-            panel.orderOut(nil)
+            orderOut()
             return
         }
         model.dismissReversed = reverse
@@ -114,8 +136,14 @@ final class HUDWindowController: NSObject {
             try? await Task.sleep(for: .milliseconds(320))
             guard !Task.isCancelled else { return }
             self?.hideTask = nil
-            self?.panel.orderOut(nil)
+            self?.orderOut()
         }
+    }
+
+    private func orderOut() {
+        panel.orderOut(nil)
+        panel.acceptsKey = false
+        model.liveEditor = nil
     }
 
     /// Human-readable description of the last anchor, for the menu bar status.
@@ -157,7 +185,7 @@ final class HUDWindowController: NSObject {
             }
         }
         let frame = NSRect(origin: origin, size: size)
-        if panel.isVisible, panel.frame.size != .zero, abs(panel.frame.width - frame.width) > 0.5 || abs(panel.frame.height - frame.height) > 0.5 {
+        if panel.isVisible, panel.frame.size != .zero, model.liveEditor == nil, abs(panel.frame.width - frame.width) > 0.5 || abs(panel.frame.height - frame.height) > 0.5 {
             // Animate the window in step with the SwiftUI content animation (see HUDView.layoutKey).
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.25

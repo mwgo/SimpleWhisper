@@ -82,7 +82,7 @@ struct GeneralSettingsView: View {
                 Picker("Dictation key", selection: Binding(get: { settings.hotkeyKey }, set: { settings.hotkeyKey = $0; controller.applyHotkeySettings() })) {
                     ForEach(HotkeyKey.allCases) { key in Text(key.title).tag(key) }
                 }
-                HotkeyLegend(key: settings.hotkeyKey, doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled)
+                HotkeyLegend(key: settings.hotkeyKey, doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled, liveTyping: settings.liveTypingEnabled)
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.applyHotkeySettings() }), in: 200...1000, step: 50)
                 Toggle("Require a double press", isOn: Binding(get: { settings.fnDoublePress }, set: { settings.fnDoublePress = $0; controller.applyHotkeySettings() }))
                 if settings.fnDoublePress {
@@ -129,6 +129,9 @@ struct GeneralSettingsView: View {
             Section("Output") {
                 Toggle("Keep dictated text in the clipboard after pasting", isOn: Binding(get: { settings.keepTextInClipboard }, set: { settings.keepTextInClipboard = $0 }))
                 Toggle("Play a sound when recording starts, stops or is cancelled", isOn: Binding(get: { settings.soundsEnabled }, set: { settings.soundsEnabled = $0; if $0 { SoundPlayer.recordingStarted() } }))
+                Toggle("Live typing", isOn: Binding(get: { settings.liveTypingEnabled }, set: { settings.liveTypingEnabled = $0 }))
+                Text("An editor opens under the HUD and fills with text at every pause. Click to move the caret and keep dictating there, or edit with the keyboard. Stop dictation (fn, or release fn in push-to-talk) to insert the text; Esc discards it.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("History") {
                 Toggle("Keep a history of recent dictations and commands", isOn: Binding(get: { settings.historyEnabled }, set: { settings.historyEnabled = $0 }))
@@ -195,6 +198,7 @@ struct HotkeyLegend: View {
     var key: HotkeyKey
     var doublePress: Bool
     var commandMode: Bool
+    var liveTyping = false
 
     var body: some View {
         let k = key.symbol
@@ -208,11 +212,15 @@ struct HotkeyLegend: View {
                 row("\(k) (hold)", "push-to-talk: release to stop")
             }
             row("esc", "cancel recording or processing")
-            row("letter / space", "while recording: pick the prompt with that shortcut / plain text")
-            if commandMode {
-                row("⌃ control", "while recording: run the dictation as a command")
+            if liveTyping {
+                row("typing, mouse", "Live typing: edit the text in the editor under the HUD")
+            } else {
+                row("letter / space", "while recording: pick the prompt with that shortcut / plain text")
+                if commandMode {
+                    row("⌃ control", "while recording: run the dictation as a command")
+                }
+                row("\(k) + any key", "keyboard shortcut: recording is cancelled silently")
             }
-            row("\(k) + any key", "keyboard shortcut: recording is cancelled silently")
         }
         .padding(.vertical, 2)
     }

@@ -52,6 +52,37 @@ enum Entry {
 enum HUDDemo {
     private static var hud: HUDWindowController?
     private static var timer: Timer?
+    private static var editor: LiveEditorController?
+
+    /// `SW_HUD_LIVE=1`: HUD with the Live typing editor; a chunk arrives every 1.5 s (placeholder first).
+    static func runLive(_ controller: HUDWindowController) {
+        let editor = LiveEditorController()
+        self.editor = editor
+        controller.show(text: "Recording", detail: "Clean up", stage: .recording, liveEditor: editor)
+        print("windowNumber=\(NSApp.windows.first { $0.isVisible }?.windowNumber ?? 0)")
+        let chunks = [
+            "Dzisiaj sprawdzam tryb pisania na żywo.",
+            "Każde zdanie pojawia się osobno, a krótka pauza nie przerywa zdania.",
+            "Tekst można poprawiać klawiaturą albo kliknąć w środek i dyktować dalej.",
+            "Po zakończeniu całość trafia do edytora docelowego.",
+            "Okno rośnie razem z tekstem, najpierw wszerz, potem w dół.",
+        ]
+        var index = 0
+        var pending: String?
+        var tick = 0
+        timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
+            tick += 1
+            controller.setLevel((sin(Double(tick) / 3) + 1) / 2 * 0.7 + Double.random(in: 0...0.3))
+            guard tick % 10 == 0 else { return }
+            if let id = pending {
+                editor.resolve(id, with: chunks[index % chunks.count])
+                index += 1
+                pending = nil
+            } else {
+                pending = editor.insertPlaceholder()
+            }
+        }
+    }
 
     static func run() {
         let app = NSApplication.shared
@@ -61,6 +92,11 @@ enum HUDDemo {
         controller.showsText = ProcessInfo.processInfo.environment["SW_HUD_NOTEXT"] == nil
         controller.theme = ProcessInfo.processInfo.environment["SW_HUD_THEME"].flatMap(HUDTheme.init(rawValue:)) ?? .freshGreen
         hud = controller
+        if ProcessInfo.processInfo.environment["SW_HUD_LIVE"] != nil {
+            runLive(controller)
+            app.run()
+            return
+        }
         let stages: [(String, String?, HUDStage)] = [
             ("Recording", "Clean up", .recording),
             ("Transcribing…", nil, .transcribing),
@@ -93,6 +129,7 @@ enum DebugCLI {
                          [--selection <text>]   (command mode: audio = instruction applied to <text>)
 
       --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech | geminiAPI
+      --live       split at pauses like Live typing and transcribe chunk by chunk
       --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
       --prompt     name of a saved prompt to post-process the text with AI
       --clipboard  text used for the clipboard macro (default: current clipboard)
@@ -132,6 +169,30 @@ enum DebugCLI {
             try await engine.prepare { status in print("  [model] \(status)") }
             let loaded = Date()
             print("Model ready in \(String(format: "%.1f", loaded.timeIntervalSince(started))) s")
+
+            if arguments.contains("--live") {
+                // Simulates Live typing: the file is fed to the pause detector in microphone-sized blocks.
+                var segmenter = PauseSegmenter()
+                var segments: [Range<Int>] = []
+                var index = 0
+                while index < samples.count {
+                    let end = min(index + 4096 / 3, samples.count)
+                    segments += segmenter.feed(Array(samples[index..<end]))
+                    index = end
+                }
+                if let tail = segmenter.finish(total: samples.count) { segments.append(tail) }
+                var joined = ""
+                for segment in segments {
+                    let t0 = Date()
+                    let result = try await engine.transcribe(samples: Array(samples[segment]), language: languageMode, vocabulary: vocabulary)
+                    var text = VocabularyPostProcessor.apply(result.text, terms: store.vocabulary)
+                    text = MacroExpander.stage2(MacroExpander.stage1(text, macros: macros, clipboard: clipboard).text, macros: macros, clipboard: clipboard)
+                    joined += LiveEditorController.fit(text, before: joined, after: "")
+                    print(String(format: "  [chunk] %5.1f–%5.1f s (%.1f s) in %.1f s: %@", Double(segment.lowerBound) / 16_000, Double(segment.upperBound) / 16_000, Double(segment.count) / 16_000, Date().timeIntervalSince(t0), text))
+                }
+                print("Live:      \(joined)")
+                return 0
+            }
 
             let transcription = try await engine.transcribe(samples: samples, language: languageMode, vocabulary: vocabulary)
             print("Transcribed in \(String(format: "%.1f", Date().timeIntervalSince(loaded))) s, language: \(transcription.detectedLanguage ?? "?")")

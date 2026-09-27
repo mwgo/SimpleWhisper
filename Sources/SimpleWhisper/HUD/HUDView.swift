@@ -30,6 +30,9 @@ final class HUDModel {
     var dismissReversed = false
     /// Recent microphone levels (0…1), newest last. Drives the recording bars.
     var levels: [Double] = Array(repeating: 0, count: HUDModel.barCount)
+    /// Live typing: editor shown under the capsule, and its current preferred size.
+    var liveEditor: LiveEditorController?
+    var editorSize: CGSize = .zero
 
     static let barCount = 9
 
@@ -59,6 +62,28 @@ struct HUDView: View {
     static let ink = Color(red: 0.03, green: 0.18, blue: 0.10)
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            capsule
+            if let editor = model.liveEditor {
+                LiveEditorView(controller: editor)
+                    .frame(width: model.editorSize.width, height: model.editorSize.height)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(model.theme.background)
+                            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                    )
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(model.theme.border, lineWidth: 1))
+                    .scaleEffect(x: dropScale, y: 1, anchor: anchor)
+                    .opacity(dropOpacity)
+            }
+        }
+        .padding(Self.outerPadding)
+        .onAppear(perform: playDropAnimation)
+        .onChange(of: model.appearance) { _, _ in playDropAnimation() }
+        .onChange(of: model.dismissal) { _, _ in playDismissAnimation() }
+    }
+
+    private var capsule: some View {
         HStack(spacing: 10) {
             indicator
                 .frame(width: 34, height: 18)
@@ -131,10 +156,6 @@ struct HUDView: View {
             }
             .allowsHitTesting(false)
         }
-        .padding(Self.outerPadding)
-        .onAppear(perform: playDropAnimation)
-        .onChange(of: model.appearance) { _, _ in playDropAnimation() }
-        .onChange(of: model.dismissal) { _, _ in playDismissAnimation() }
     }
 
     /// Mirror of the appear animation: the capsule folds towards its right edge and a ripple runs the same way.

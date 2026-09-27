@@ -25,9 +25,19 @@ final class AudioRecorder {
     /// Called on the audio thread with a smoothed input level in 0…1.
     var onLevel: ((Double) -> Void)?
     private var smoothedLevel: Double = 0
+    /// Pause detection for live typing; segments are queued under `lock` and taken on the main thread.
+    var segmentsEnabled = false
+    private var segmenter = PauseSegmenter()
+    private var readySegments: [Range<Int>] = []
+    /// Called on the audio thread when `takeSegments()` has something new.
+    var onSegmentsAvailable: (() -> Void)?
 
     func start() throws {
-        lock.withLock { samples.removeAll(keepingCapacity: true) }
+        lock.withLock {
+            samples.removeAll(keepingCapacity: true)
+            segmenter.reset()
+            readySegments = []
+        }
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw RecorderError.noInputDevice }
@@ -76,8 +86,44 @@ final class AudioRecorder {
         }
         guard status != .error, let channel = output.floatChannelData else { return }
         let converted = Array(UnsafeBufferPointer(start: channel[0], count: Int(output.frameLength)))
-        lock.withLock { samples.append(contentsOf: converted) }
+        let hasSegments: Bool = lock.withLock {
+            samples.append(contentsOf: converted)
+            guard segmentsEnabled else { return false }
+            let found = segmenter.feed(converted)
+            readySegments.append(contentsOf: found)
+            return !found.isEmpty
+        }
+        if hasSegments { onSegmentsAvailable?() }
         reportLevel(converted)
+    }
+
+    /// Finished speech segments since the last call, in recording order.
+    func takeSegments() -> [Range<Int>] {
+        lock.withLock {
+            defer { readySegments = [] }
+            return readySegments
+        }
+    }
+
+    /// The open (not yet committed) segment: from its start to the newest sample, and whether it has speech.
+    func openSegment() -> (range: Range<Int>, hasSpeech: Bool) {
+        lock.withLock { (segmenter.segmentStart..<max(samples.count, segmenter.segmentStart), segmenter.hasSpeech) }
+    }
+
+    func samples(in range: Range<Int>) -> [Float] {
+        lock.withLock {
+            let clamped = range.clamped(to: 0..<samples.count)
+            return Array(samples[clamped])
+        }
+    }
+
+    /// Stops like `stop()` and also returns segments not yet taken plus the unfinished tail.
+    func stopWithSegments() -> (samples: [Float], segments: [Range<Int>]) {
+        let segments = takeSegments()
+        let all = stop()
+        var tail: Range<Int>? = nil
+        lock.withLock { tail = segmenter.finish(total: all.count) }
+        return (all, segments + (tail.map { [$0] } ?? []))
     }
 
     private func reportLevel(_ chunk: [Float]) {

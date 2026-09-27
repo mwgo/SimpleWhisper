@@ -17,6 +17,8 @@ protocol HotkeyMonitorDelegate: AnyObject {
     /// A character typed while recording: selects the prompt with that shortcut (space = no prompt).
     /// Returns true when consumed (the key is then swallowed).
     func hotkeyPromptShortcut(_ character: String) -> Bool
+    /// Live typing editor is open: keys belong to the editor (only fn and Esc keep their meaning).
+    var isLiveEditing: Bool { get }
 }
 
 /// Which modifier key starts dictation.
@@ -156,15 +158,17 @@ final class HotkeyMonitor {
             return Unmanaged.passUnretained(event)
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        var live = false
+        MainActor.assumeIsolated { live = delegate?.isLiveEditing ?? false }
         switch type {
         case .flagsChanged where keyCode == triggerKey.keyCode:
             if event.flags.contains(triggerKey.flag) {
                 // fn pressed while another modifier is already held (ctrl+fn…) is someone else's shortcut.
-                fnPressed(asCombo: Self.hasOtherModifiers(event.flags, besides: triggerKey.flag))
+                fnPressed(asCombo: !live && Self.hasOtherModifiers(event.flags, besides: triggerKey.flag))
             } else {
                 fnReleased()
             }
-        case .flagsChanged where Self.modifierKeyCodes.contains(keyCode) && (fnDownAt != nil && !pushToTalkActive || recentlyStartedByFn):
+        case .flagsChanged where !live && Self.modifierKeyCodes.contains(keyCode) && (fnDownAt != nil && !pushToTalkActive || recentlyStartedByFn):
             // A modifier pressed together with fn (or right after a short fn press) is a shortcut, not dictation.
             comboUsed = true
             if recentlyStartedByFn {
@@ -174,7 +178,7 @@ final class HotkeyMonitor {
                 MainActor.assumeIsolated { delegate?.hotkeyCancelSilently() }
             }
             cancelHold()
-        case .flagsChanged where Self.controlKeyCodes.contains(keyCode) && event.flags.contains(.maskControl):
+        case .flagsChanged where !live && Self.controlKeyCodes.contains(keyCode) && event.flags.contains(.maskControl):
             var handled = false
             MainActor.assumeIsolated { handled = delegate?.hotkeyRunCommand() ?? false }
             if handled {
@@ -198,6 +202,8 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
+            } else if live {
+                break
             } else if let character = Self.character(of: event), !event.flags.contains(.maskCommand), !event.flags.contains(.maskControl),
                       promptShortcut(character) {
                 return nil

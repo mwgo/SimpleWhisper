@@ -32,6 +32,12 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   “nawias otwarty/zamknięty”, “nowy akapit”/“new paragraph”. Marks are placed with proper spacing,
   the next sentence is capitalised, and punctuation the model already inserted is merged rather than
   doubled. One switch (Settings › Macros or the menu bar) turns it off when those words are meant literally.
+- **Live typing** (Settings › General › Output, or the menu bar): an editor opens under the HUD and
+  fills with text at every pause (a “⋯” marks where a chunk will land). Click anywhere to move the
+  caret and keep dictating there, select text to replace it, or edit with the keyboard; the editor
+  grows with the text. Stop dictation (fn, or release fn in push-to-talk) to run the selected prompt
+  and insert the result into the original app; Esc discards it (kept in History when enabled). While
+  the editor is open, letters, space and Control type into it instead of acting as shortcuts.
 - **Command mode** (Settings › General): select text in the editor, start dictation, say what to do with
   it (“convert to markdown”, “translate to English”, “make it shorter”) and click the round ▶ button in the
   HUD or press Control (while still holding fn, or after a short fn press). The selection is read (Accessibility, or ⌘C), sent to the AI command with your instruction, and the

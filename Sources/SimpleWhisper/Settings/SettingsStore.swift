@@ -32,6 +32,9 @@ final class AppSettings {
     var soundsEnabled: Bool {
         didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") }
     }
+    var liveTypingEnabled: Bool {
+        didSet { defaults.set(liveTypingEnabled, forKey: "liveTypingEnabled") }
+    }
     /// Show the status text ("Recording", "Processing · …") next to the animation.
     var hudShowsText: Bool {
         didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
@@ -133,6 +136,7 @@ final class AppSettings {
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
         soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
+        liveTypingEnabled = defaults.bool(forKey: "liveTypingEnabled")
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false

@@ -121,6 +121,21 @@ final class WhisperKitEngine: SpeechEngine {
                 DebugLog.write("Vocabulary prompt disabled for \(kind.title)")
             }
         }
+        if Self.looksTruncated(text, seconds: seconds) {
+            // Turbo sometimes returns nothing (or stops early) for a perfectly clear recording.
+            // Splitting it at silences with WhisperKit's VAD gets past that; keep whichever is longer.
+            var split = options
+            split.promptTokens = nil
+            split.chunkingStrategy = .vad
+            let retried = try await kit.transcribe(audioArray: samples, decodeOptions: split)
+            let retriedText = Self.joinedText(retried)
+            DebugLog.write("Whisper pass (VAD chunks): \(retriedText.count) chars")
+            if retriedText.count > text.count {
+                results = retried
+                text = retriedText
+                debugInfo = (debugInfo ?? "") + " (retried with VAD chunking)"
+            }
+        }
         let detected = languageCode ?? results.first?.language
         return Transcription(text: text, detectedLanguage: detected, debugInfo: debugInfo)
     }
@@ -128,8 +143,8 @@ final class WhisperKitEngine: SpeechEngine {
     /// Empty output, or fewer than ~3 characters per second on a recording longer than 10 s,
     /// almost certainly means the decoder dropped whole windows.
     private static func looksTruncated(_ text: String, seconds: Double) -> Bool {
-        if text.isEmpty { return true }
-        return seconds > 10 && Double(text.count) / seconds < 3
+        if text.isEmpty { return seconds > 1 }
+        return seconds > 4 && Double(text.count) / seconds < 4
     }
 
     private static func joinedText(_ results: [TranscriptionResult]) -> String {
