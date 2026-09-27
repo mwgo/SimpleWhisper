@@ -72,6 +72,9 @@ struct GeneralSettingsView: View {
                     Text("Every recording is uploaded to Google. The key is shared with the Gemini provider in the AI tab. Get one at aistudio.google.com.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Toggle("Filter silence and hallucinations", isOn: Binding(get: { settings.noiseFilterEnabled }, set: { settings.noiseFilterEnabled = $0 }))
+                Text("Before transcription, everything the voice detector (Silero VAD) does not recognise as speech is cut out, and a recording without speech is dropped. Afterwards, phrases models invent on silence are removed, such as “Dziękuję.” or “Napisy stworzone przez społeczność Amara.org”; ambiguous ones only where the audio is not speech.")
+                    .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(state.isModelLoading ? "Loading…" : "Load model now") { Task { await controller.loadModel() } }
                         .disabled(state.isModelLoading)

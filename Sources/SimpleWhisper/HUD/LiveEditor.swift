@@ -18,6 +18,9 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
     /// Called after the preferred size changed.
     var onSizeChange: (CGSize) -> Void = { _ in }
     var inkColor: NSColor = .labelColor { didSet { applyColors() } }
+    /// The user clicked, moved the caret or typed (not our own insertions).
+    var onUserEdit: () -> Void = {}
+    private var programmaticChange = false
 
     override init() {
         scrollView = NSTextView.scrollableTextView()
@@ -52,6 +55,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
     }
 
     func reset() {
+        programmaticChange = true
+        defer { programmaticChange = false }
         textView.isEditable = true
         textView.string = ""
         textView.undoManager?.removeAllActions()
@@ -116,6 +121,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
 
     private func replace(_ range: NSRange, with string: NSAttributedString, caretAfter: Bool) {
         guard let storage = textView.textStorage else { return }
+        programmaticChange = true
+        defer { programmaticChange = false }
         let selection = textView.selectedRange()
         guard textView.shouldChangeText(in: range, replacementString: string.string) else { return }
         storage.replaceCharacters(in: range, with: string)
@@ -192,7 +199,14 @@ final class LiveEditorController: NSObject, NSTextViewDelegate {
 
     // MARK: Size
 
-    func textDidChange(_ notification: Notification) { updateSize() }
+    func textDidChange(_ notification: Notification) {
+        updateSize()
+        if !programmaticChange { onUserEdit() }
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        if !programmaticChange { onUserEdit() }
+    }
 
     private func updateSize() {
         let font = textView.font ?? .systemFont(ofSize: 14)

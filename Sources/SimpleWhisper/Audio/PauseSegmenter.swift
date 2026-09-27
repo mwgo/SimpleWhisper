@@ -52,6 +52,13 @@ struct PauseSegmenter {
         return segments
     }
 
+    /// Closes the open segment now (the user moved the caret). Returns it if it contains speech.
+    mutating func forceCut(total: Int) -> Range<Int>? {
+        defer { segmentStart = max(segmentStart, total); speechSamples = 0; silenceRun = 0 }
+        guard total > segmentStart, speechSamples > 0 else { return nil }
+        return segmentStart..<total
+    }
+
     /// The unfinished tail at the end of the recording, if it contains speech.
     mutating func finish(total: Int) -> Range<Int>? {
         defer { segmentStart = total; speechSamples = 0 }

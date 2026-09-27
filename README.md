@@ -18,6 +18,11 @@ prompts (Apple Intelligence or any CLI such as `claude -p`).
   post-processing prompt.
 - **Models**: Whisper Large v3 Turbo, Whisper Large v3 (626 MB), Whisper Small, Parakeet v3,
   Apple Speech. Models download on first use.
+- **Filter silence and hallucinations** (on by default, Settings › General): before transcription the
+  Silero voice detector (FluidAudio) cuts out everything that is not speech, and a recording without
+  speech is dropped; afterwards phrases models invent on silence (“Dziękuję.”, “Thank you.”,
+  “Napisy stworzone przez społeczność Amara.org”…) are removed, the ambiguous ones only where the
+  audio under them is not speech.
 - **Gemini API (cloud, optional)**: sends the recording to Google's Gemini API
   (default model `gemini-2.5-flash`). Needs an API key from aistudio.google.com, entered in
   Settings › General; the vocabulary list is passed in the instructions.

@@ -137,7 +137,8 @@ final class WhisperKitEngine: SpeechEngine {
             }
         }
         let detected = languageCode ?? results.first?.language
-        return Transcription(text: text, detectedLanguage: detected, debugInfo: debugInfo)
+        let timed = results.flatMap(\.segments).map { TimedText(start: Double($0.start), end: Double($0.end), text: $0.text) }
+        return Transcription(text: text, detectedLanguage: detected, debugInfo: debugInfo, segments: timed)
     }
 
     /// Empty output, or fewer than ~3 characters per second on a recording longer than 10 s,

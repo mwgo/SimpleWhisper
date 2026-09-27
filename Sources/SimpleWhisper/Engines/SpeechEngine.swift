@@ -6,6 +6,14 @@ struct Transcription {
     var detectedLanguage: String?
     /// Engine-specific diagnostics (e.g. language probabilities), for the CLI test mode.
     var debugInfo: String? = nil
+    /// Timed pieces of `text` when the engine provides them (Whisper), for the hallucination filter.
+    var segments: [TimedText] = []
+}
+
+struct TimedText {
+    var start: Double
+    var end: Double
+    var text: String
 }
 
 enum EngineError: LocalizedError {
@@ -64,5 +72,30 @@ enum LanguageGuess {
         }
         recognizer.processString(trimmed)
         return recognizer.dominantLanguage?.rawValue
+    }
+}
+
+/// Transcription with the optional silence (VAD) and hallucination filters around the engine.
+enum FilteredTranscription {
+    /// Returns nil when the silence filter finds no speech at all.
+    static func run(_ engine: SpeechEngine, samples: [Float], language: LanguageMode, vocabulary: [VocabularyTerm],
+                    filterSilence: Bool, filterHallucinations: Bool) async throws -> Transcription? {
+        var audio = samples
+        if filterSilence {
+            audio = await SpeechDetector.shared.keepSpeech(samples)
+            let seconds = { (count: Int) in String(format: "%.1f", Double(count) / 16_000) }
+            if audio.isEmpty {
+                DebugLog.write("Silence filter: no speech in \(seconds(samples.count)) s")
+                return nil
+            }
+            if audio.count < samples.count {
+                DebugLog.write("Silence filter: kept \(seconds(audio.count)) of \(seconds(samples.count)) s")
+            }
+        }
+        var transcription = try await engine.transcribe(samples: audio, language: language, vocabulary: vocabulary)
+        if filterHallucinations {
+            transcription.text = await HallucinationFilter.clean(transcription, samples: audio)
+        }
+        return transcription
     }
 }

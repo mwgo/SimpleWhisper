@@ -130,6 +130,8 @@ enum DebugCLI {
 
       --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech | geminiAPI
       --live       split at pauses like Live typing and transcribe chunk by chunk
+      --no-filter  disable the silence (VAD) and hallucination filters
+                   (or one of them: --no-silence-filter, --no-hallucination-filter)
       --language   auto (default: pl+en) | any | <code> | <code,code,...> e.g. pl,en,de
       --prompt     name of a saved prompt to post-process the text with AI
       --clipboard  text used for the clipboard macro (default: current clipboard)
@@ -159,6 +161,8 @@ enum DebugCLI {
         let macros = store.activeMacros(spokenPunctuation: spokenPunctuation)
         let vocabulary = arguments.contains("--no-vocabulary") ? [] : store.effectiveVocabulary(spokenPunctuation: spokenPunctuation)
         let clipboard = value("--clipboard")
+        let silenceFilter = !arguments.contains("--no-filter") && !arguments.contains("--no-silence-filter")
+        let hallucinationFilter = !arguments.contains("--no-filter") && !arguments.contains("--no-hallucination-filter")
 
         do {
             let started = Date()
@@ -184,8 +188,9 @@ enum DebugCLI {
                 var joined = ""
                 for segment in segments {
                     let t0 = Date()
-                    let result = try await engine.transcribe(samples: Array(samples[segment]), language: languageMode, vocabulary: vocabulary)
-                    var text = VocabularyPostProcessor.apply(result.text, terms: store.vocabulary)
+                    let result = try await FilteredTranscription.run(engine, samples: Array(samples[segment]), language: languageMode, vocabulary: vocabulary,
+                                                                     filterSilence: silenceFilter, filterHallucinations: hallucinationFilter)
+                    var text = VocabularyPostProcessor.apply(result?.text ?? "", terms: store.vocabulary)
                     text = MacroExpander.stage2(MacroExpander.stage1(text, macros: macros, clipboard: clipboard).text, macros: macros, clipboard: clipboard)
                     joined += LiveEditorController.fit(text, before: joined, after: "")
                     print(String(format: "  [chunk] %5.1f–%5.1f s (%.1f s) in %.1f s: %@", Double(segment.lowerBound) / 16_000, Double(segment.upperBound) / 16_000, Double(segment.count) / 16_000, Date().timeIntervalSince(t0), text))
@@ -194,10 +199,17 @@ enum DebugCLI {
                 return 0
             }
 
-            let transcription = try await engine.transcribe(samples: samples, language: languageMode, vocabulary: vocabulary)
+            guard let transcription = try await FilteredTranscription.run(engine, samples: samples, language: languageMode, vocabulary: vocabulary,
+                                                                          filterSilence: silenceFilter, filterHallucinations: hallucinationFilter) else {
+                print("No speech (silence filter)")
+                return 0
+            }
             print("Transcribed in \(String(format: "%.1f", Date().timeIntervalSince(loaded))) s, language: \(transcription.detectedLanguage ?? "?")")
             if let info = transcription.debugInfo { print("  [lang] \(info)") }
             print("Raw:       \(transcription.text)")
+            if arguments.contains("--segments") {
+                for s in transcription.segments { print(String(format: "  [seg] %5.2f–%5.2f %@", s.start, s.end, s.text)) }
+            }
 
             if let selection = value("--selection") {
                 let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary).trimmingCharacters(in: .whitespacesAndNewlines)

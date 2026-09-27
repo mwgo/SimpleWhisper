@@ -62,6 +62,9 @@ final class DictationController: HotkeyMonitorDelegate {
         recorder.onLevel = { [weak self] level in
             Task { @MainActor in self?.hud.setLevel(level) }
         }
+        liveEditor.onUserEdit = { [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.closeActiveUtterance() } }
+        }
         recorder.onSegmentsAvailable = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.drainLiveSegments() } }
         }
@@ -329,7 +332,7 @@ final class DictationController: HotkeyMonitorDelegate {
             let engine = try await ensureEngine(settings.engineKind)
             try Task.checkCancellation()
             let vocabulary = store.effectiveVocabulary(spokenPunctuation: false)
-            let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
+            guard let transcription = try await transcribe(engine, samples, vocabulary: vocabulary) else { throw DictationError.noSpeech }
             try Task.checkCancellation()
             let instruction = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -488,6 +491,21 @@ final class DictationController: HotkeyMonitorDelegate {
         }
     }
 
+    /// The user clicked, moved the caret or typed: whatever is being said now belongs to the old spot,
+    /// and the next words start a new utterance at the new caret.
+    private func closeActiveUtterance() {
+        guard liveSession, state.phase == .recording else { return }
+        drainLiveSegments()
+        // Nothing shown yet: the words being spoken simply land at the new caret.
+        guard let id = liveActiveID else { return }
+        if let samples = recorder.cutOpenSegment() {
+            enqueueLiveChunk(samples)   // commits into the active placeholder
+        } else {
+            liveActiveID = nil
+            liveEditor.drop(id)
+        }
+    }
+
     /// About once a second, re-transcribes the utterance in progress and shows it greyed in the editor.
     private func startLivePreviewLoop() {
         livePreviewLoop?.cancel()
@@ -525,9 +543,10 @@ final class DictationController: HotkeyMonitorDelegate {
             let engine = try await ensureEngine(settings.engineKind)
             let vocabulary = store.effectiveVocabulary(spokenPunctuation: settings.spokenPunctuationEnabled)
             let macros = store.activeMacros(spokenPunctuation: settings.spokenPunctuationEnabled)
-            let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
+            let transcription = try await transcribe(engine, samples, vocabulary: vocabulary)
             guard generation == liveGeneration else { return }
-            var text = VocabularyPostProcessor.apply(transcription.text, terms: store.vocabulary)
+            if transcription == nil && !final { return }
+            var text = VocabularyPostProcessor.apply(transcription?.text ?? "", terms: store.vocabulary)
             text = MacroExpander.stage1(text, macros: macros, clipboard: capturedClipboard).text
             text = MacroExpander.stage2(text, macros: macros, clipboard: capturedClipboard)
             guard final else {
@@ -542,7 +561,7 @@ final class DictationController: HotkeyMonitorDelegate {
                 DebugLog.write("Live chunk final (\(text.count) chars) shorter than its preview (\(preview.count)); keeping the preview")
                 text = preview
             }
-            liveLanguage = transcription.detectedLanguage ?? liveLanguage
+            liveLanguage = transcription?.detectedLanguage ?? liveLanguage
             DebugLog.write("Live chunk \(String(format: "%.1f", Double(samples.count) / 16_000)) s → \(text.count) chars")
             liveEditor.resolve(id, with: text)
         } catch {
@@ -631,7 +650,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
             let vocabulary = store.effectiveVocabulary(spokenPunctuation: settings.spokenPunctuationEnabled)
             let macros = store.activeMacros(spokenPunctuation: settings.spokenPunctuationEnabled)
-            let transcription = try await engine.transcribe(samples: samples, language: settings.languageMode, vocabulary: vocabulary)
+            guard let transcription = try await transcribe(engine, samples, vocabulary: vocabulary) else { throw DictationError.noSpeech }
             try Task.checkCancellation()
             DebugLog.write("Transcribed \(String(format: "%.1f", Double(samples.count) / AudioRecorder.targetFormat.sampleRate)) s → \(transcription.text.count) chars (\(transcription.detectedLanguage ?? "?"))")
 
@@ -673,6 +692,11 @@ final class DictationController: HotkeyMonitorDelegate {
             DebugLog.write("Pipeline error: \(error)")
             showError(error.localizedDescription)
         }
+    }
+
+    private func transcribe(_ engine: SpeechEngine, _ samples: [Float], vocabulary: [VocabularyTerm]) async throws -> Transcription? {
+        try await FilteredTranscription.run(engine, samples: samples, language: settings.languageMode, vocabulary: vocabulary,
+                                            filterSilence: settings.noiseFilterEnabled, filterHallucinations: settings.noiseFilterEnabled)
     }
 
     /// Runs the prompt's AI step with an elapsed-seconds ticker. On AI failure the input is returned unchanged.

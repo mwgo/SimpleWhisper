@@ -35,6 +35,10 @@ final class AppSettings {
     var liveTypingEnabled: Bool {
         didSet { defaults.set(liveTypingEnabled, forKey: "liveTypingEnabled") }
     }
+    /// Silence (VAD) and hallucination filters around every transcription.
+    var noiseFilterEnabled: Bool {
+        didSet { defaults.set(noiseFilterEnabled, forKey: "noiseFilterEnabled") }
+    }
     /// Show the status text ("Recording", "Processing · …") next to the animation.
     var hudShowsText: Bool {
         didSet { defaults.set(hudShowsText, forKey: "hudShowsText") }
@@ -137,6 +141,7 @@ final class AppSettings {
         hudShowsText = defaults.object(forKey: "hudShowsText") as? Bool ?? true
         soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
         liveTypingEnabled = defaults.bool(forKey: "liveTypingEnabled")
+        noiseFilterEnabled = defaults.object(forKey: "noiseFilterEnabled") as? Bool ?? true
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen
         holdThresholdMs = defaults.object(forKey: "holdThresholdMs") as? Int ?? 400
         fnDoublePress = defaults.object(forKey: "fnDoublePress") as? Bool ?? false

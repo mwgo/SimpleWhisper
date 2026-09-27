@@ -110,6 +110,14 @@ final class AudioRecorder {
         lock.withLock { (segmenter.segmentStart..<max(samples.count, segmenter.segmentStart), segmenter.hasSpeech) }
     }
 
+    /// Ends the open segment immediately; returns its samples if it contained speech.
+    func cutOpenSegment() -> [Float]? {
+        lock.withLock {
+            guard let range = segmenter.forceCut(total: samples.count) else { return nil }
+            return Array(samples[range.clamped(to: 0..<samples.count)])
+        }
+    }
+
     func samples(in range: Range<Int>) -> [Float] {
         lock.withLock {
             let clamped = range.clamped(to: 0..<samples.count)
