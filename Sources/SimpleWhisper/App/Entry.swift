@@ -146,7 +146,7 @@ enum DebugCLI {
                          [--prompt <name>] [--clipboard <text>] [--no-vocabulary] [--no-punctuation]
                          [--selection <text>]   (command mode: audio = instruction applied to <text>)
 
-      --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | appleSpeech | geminiAPI
+      --engine     whisperSmall (default) | whisperLargeV3Turbo | whisperLargeV3Compressed | parakeetV3 | parakeetUltra | appleSpeech | geminiAPI
       --live       split at pauses like Live typing and transcribe chunk by chunk
       --no-filter  disable the silence (VAD) and hallucination filters
                    (or one of them: --no-silence-filter, --no-hallucination-filter)

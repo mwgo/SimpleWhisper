@@ -293,7 +293,7 @@ final class DataStore {
         let known = Set(terms.map { $0.text.lowercased() })
         for macro in activeMacros(spokenPunctuation: spokenPunctuation) {
             for keyword in macro.keywords where !known.contains(keyword.lowercased()) && keyword.count >= 3 {
-                terms.append(VocabularyTerm(text: keyword))
+                terms.append(VocabularyTerm(text: keyword, isMacroKeyword: true))
             }
         }
         return terms

@@ -2,7 +2,7 @@ import Foundation
 import FluidAudio
 
 final class ParakeetEngine: SpeechEngine {
-    let kind: EngineKind = .parakeetV3
+    let kind: EngineKind
     private var manager: AsrManager?
     private var ctcModels: CtcModels?
     private var boosting: VocabularyBoostingSession?
@@ -10,10 +10,18 @@ final class ParakeetEngine: SpeechEngine {
 
     var isReady: Bool { manager != nil }
 
+    init(kind: EngineKind) {
+        self.kind = kind
+    }
+
+    private var version: AsrModelVersion {
+        kind == .parakeetUltra ? .ultra : .v3
+    }
+
     func prepare(status: @escaping EngineStatusHandler) async throws {
         if manager != nil { return }
-        status("Downloading Parakeet v3…")
-        let models = try await AsrModels.downloadAndLoad(version: .v3)
+        status("Downloading \(kind.title)…")
+        let models = try await AsrModels.downloadAndLoad(version: version)
         let asr = AsrManager(config: .default)
         try await asr.loadModels(models)
         manager = asr
@@ -29,12 +37,16 @@ final class ParakeetEngine: SpeechEngine {
         var text = result.text
         var debugInfo: String? = nil
 
-        if !vocabulary.isEmpty {
+        let boosted = vocabulary.filter { !$0.isMacroKeyword }
+        if !boosted.isEmpty {
             do {
-                let session = try await ensureBoosting(vocabulary)
+                let session = try await ensureBoosting(boosted)
                 if let output = await session.rescore(text: text, tokenTimings: result.tokenTimings ?? [], audioSamples: samples) {
-                    debugInfo = "vocabulary boosting: modified=\(output.wasModified) replacements=\(output.replacements.count)"
-                    if output.wasModified { text = output.text }
+                    let replacements = output.replacements.compactMap { item in
+                        item.shouldReplace ? item.replacementWord.map { BoostReplacements.Replacement(original: item.originalWord, replacement: $0) } : nil
+                    }
+                    debugInfo = "vocabulary boosting: " + replacements.map { "[\($0.original) → \($0.replacement)]" }.joined(separator: " ")
+                    text = BoostReplacements.apply(replacements, to: text, terms: boosted)
                 } else {
                     debugInfo = "vocabulary boosting: no output (timings=\(result.tokenTimings?.count ?? 0))"
                 }
@@ -60,7 +72,8 @@ final class ParakeetEngine: SpeechEngine {
         let terms = vocabulary.map { term in
             CustomVocabularyTerm(text: term.text, aliases: term.aliases.isEmpty ? nil : term.aliases)
         }
-        let context = CustomVocabularyContext(terms: terms)
+        // The default 0.52 lets common words through ("nową" → "enova").
+        let context = CustomVocabularyContext(terms: terms, minSimilarity: 0.65)
         let session = try await VocabularyBoostingSession(vocabulary: context, ctcModels: ctc)
         boosting = session
         boostedTerms = vocabulary

@@ -818,7 +818,7 @@ struct AboutView: View {
 
     private let components: [(String, String, String)] = [
         ("WhisperKit", "Argmax · OpenAI Whisper on CoreML", "https://github.com/argmaxinc/argmax-oss-swift"),
-        ("FluidAudio", "NVIDIA Parakeet TDT 0.6B v3 on CoreML", "https://github.com/FluidInference/FluidAudio"),
+        ("FluidAudio", "NVIDIA Parakeet TDT 0.6B v3 and Parakeet Ultra on CoreML", "https://github.com/FluidInference/FluidAudio"),
         ("Apple Speech", "SpeechAnalyzer / DictationTranscriber (macOS 26)", "https://developer.apple.com/documentation/speech"),
         ("Claude Code CLI", "AI post-processing via `claude -p`", "https://claude.com/claude-code"),
     ]

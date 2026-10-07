@@ -106,6 +106,7 @@ Dictating over a Finder window or a web page with no text field? The text stays 
 | Whisper Large v3 | On device · 626 MB | Recommended by Argmax, smaller download |
 | Whisper Small | On device · ~200 MB | Quick tests |
 | Parakeet v3 | On device · ~0.6 GB | Very fast, 25 European languages |
+| Parakeet Ultra | On device · ~0.6 GB | Parakeet v3 post-trained for accuracy, same speed |
 | Apple Speech | Built into macOS | No download |
 | Gemini API | Cloud · your API key | Optional; the recording is sent to Google |
 
@@ -197,7 +198,7 @@ Macros of type Punctuation, Polish and English: “przecinek”/“comma”, “
 <details>
 <summary><b>Speech engines, silence and hallucination filter</b></summary>
 
-- Models download on first use: Whisper via WhisperKit, NVIDIA Parakeet v3 via FluidAudio, Apple's built-in recognizers, and the optional Gemini API (default model `gemini-2.5-flash`; API key from aistudio.google.com in Settings › General; the vocabulary list is passed in the instructions).
+- Models download on first use: Whisper via WhisperKit, NVIDIA Parakeet v3 and Parakeet Ultra via FluidAudio, Apple's built-in recognizers, and the optional Gemini API (default model `gemini-2.5-flash`; API key from aistudio.google.com in Settings › General; the vocabulary list is passed in the instructions).
 - **Filter silence and hallucinations** (on by default, Settings › General): before transcription the Silero voice detector (FluidAudio) cuts out everything that is not speech, and a recording without speech is dropped; afterwards phrases models invent on silence (“Dziękuję.”, “Thank you.”, “Napisy stworzone przez społeczność Amara.org”…) are removed, the ambiguous ones only where the audio under them is not speech.
 
 </details>

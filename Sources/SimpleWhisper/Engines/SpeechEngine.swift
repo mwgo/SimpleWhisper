@@ -51,8 +51,8 @@ enum EngineFactory {
         switch kind {
         case .whisperLargeV3Turbo, .whisperLargeV3Compressed, .whisperSmall:
             return WhisperKitEngine(kind: kind)
-        case .parakeetV3:
-            return ParakeetEngine()
+        case .parakeetV3, .parakeetUltra:
+            return ParakeetEngine(kind: kind)
         case .appleSpeech:
             return AppleSpeechEngine()
         case .geminiAPI:
