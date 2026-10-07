@@ -818,7 +818,7 @@ struct AboutView: View {
 
     private let components: [(String, String, String)] = [
         ("WhisperKit", "Argmax · OpenAI Whisper on CoreML", "https://github.com/argmaxinc/argmax-oss-swift"),
-        ("FluidAudio", "NVIDIA Parakeet TDT 0.6B v3 and Parakeet Ultra on CoreML", "https://github.com/FluidInference/FluidAudio"),
+        ("FluidAudio", "NVIDIA Parakeet v3 and Ultra on CoreML", "https://github.com/FluidInference/FluidAudio"),
         ("Apple Speech", "SpeechAnalyzer / DictationTranscriber (macOS 26)", "https://developer.apple.com/documentation/speech"),
         ("Claude Code CLI", "AI post-processing via `claude -p`", "https://claude.com/claude-code"),
     ]
@@ -861,7 +861,11 @@ struct AboutView: View {
                 Button("Open data folder") { NSWorkspace.shared.open(DataStore.directory) }
                 Button("Open debug log") { NSWorkspace.shared.open(DataStore.directory.appendingPathComponent("debug.log")) }
             }
-            Text("© 2026 Marcin Wojas").font(.caption).foregroundStyle(.tertiary)
+            HStack(spacing: 12) {
+                Text("© 2026 Marcin Wojas").foregroundStyle(.tertiary)
+                Link("mwgo.github.io/SimpleWhisper", destination: URL(string: "https://mwgo.github.io/SimpleWhisper/")!)
+            }
+            .font(.caption)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
