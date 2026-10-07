@@ -19,6 +19,8 @@
 <p align="center">
   <a href="https://github.com/mwgo/SimpleWhisper/releases/latest"><img src="https://img.shields.io/badge/Download_for_macOS-1a7f37?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS"></a>
   &nbsp;
+  <a href="https://mwgo.github.io/SimpleWhisper/"><img src="https://img.shields.io/badge/Website-30363d?style=for-the-badge" alt="Website"></a>
+  &nbsp;
   <a href="#documentation"><img src="https://img.shields.io/badge/Documentation-30363d?style=for-the-badge" alt="Documentation"></a>
 </p>
 
