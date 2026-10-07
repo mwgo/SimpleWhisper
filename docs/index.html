@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimpleWhisper – private dictation for macOS</title>
+<meta name="description" content="Press fn, speak, and your words land wherever you type. Free, open-source dictation for macOS, transcribed on your Mac with Whisper or Parakeet.">
+<meta property="og:title" content="SimpleWhisper – private dictation for macOS">
+<meta property="og:description" content="Press fn, speak, and your words land wherever you type. Transcribed on your Mac.">
+<meta property="og:image" content="https://mwgo.github.io/SimpleWhisper/images/live-typing.gif">
+<link rel="icon" href="images/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400..800;1,400..800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f2f5f2;
+  --sheet: #ffffff;
+  --ink: #13251b;
+  --muted: #536159;
+  --provisional: #9ba8a1;
+  --green: #2e9b5a;
+  --green-deep: #1f7a44;
+  --level: #e0524a;
+  --rule: #d5ddd7;
+  --shadow: 0 1px 2px rgba(19, 37, 27, .08), 0 8px 24px rgba(19, 37, 27, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e1712;
+    --sheet: #15211a;
+    --ink: #e4eee8;
+    --muted: #9fb0a6;
+    --provisional: #5b6c62;
+    --green: #47b874;
+    --green-deep: #5fcb88;
+    --rule: #26352c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 "Schibsted Grotesk", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--green-deep); text-underline-offset: .18em; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; border-radius: 6px; }
+img { display: block; max-width: 100%; height: auto; }
+.showcase img, .shot img { width: 100%; }
+.wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.125rem; color: var(--ink); text-decoration: none; }
+.brand img { width: 36px; height: 36px; }
+.top nav { display: flex; gap: 20px; align-items: center; font-size: .9375rem; }
+.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a:hover { color: var(--ink); }
+
+/* Hero */
+.hero { padding: 56px 0 40px; }
+.hud {
+  display: inline-flex; align-items: center; gap: 12px;
+  height: 44px; padding: 0 18px 0 16px; border-radius: 22px;
+  background: color-mix(in srgb, var(--green) 30%, var(--sheet));
+  box-shadow: var(--shadow);
+  font-weight: 600; font-size: .9375rem;
+  transition: transform .35s ease, opacity .35s ease;
+}
+.bars { display: flex; align-items: center; gap: 3px; height: 20px; }
+.bars i { width: 3px; height: 4px; border-radius: 2px; background: var(--level); transition: height .09s linear; }
+.hud .state { min-width: 6.5em; }
+.hud .prompt { color: var(--muted); font-weight: 500; }
+
+h1 {
+  margin: 28px 0 0;
+  max-width: 15ch;
+  font-size: clamp(2.6rem, 7vw, 5.4rem);
+  line-height: 1.02;
+  letter-spacing: -.03em;
+  font-weight: 750;
+}
+h1 .w { transition: color .45s ease; }
+h1 .w.pending { color: var(--provisional); }
+h1 .w.hidden { color: transparent; }
+h1 .caret {
+  display: inline-block; width: .06em; height: .85em; margin-left: .04em;
+  vertical-align: -.06em; background: var(--green); animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.lede { max-width: 34em; margin: 28px 0 0; font-size: 1.25rem; line-height: 1.55; color: var(--muted); }
+.lede strong { color: var(--ink); font-weight: 600; }
+
+kbd {
+  display: inline-grid; place-items: center;
+  min-width: 2em; height: 1.75em; padding: 0 .45em;
+  border-radius: 6px; border: 1px solid var(--rule);
+  background: var(--sheet); color: var(--ink);
+  box-shadow: 0 2px 0 var(--rule);
+  font: 600 .8em/1 "Schibsted Grotesk", system-ui, sans-serif;
+  vertical-align: .08em;
+}
+.lede kbd.pressed { transform: translateY(2px); box-shadow: 0 0 0 var(--rule); transition: transform .08s, box-shadow .08s; }
+
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin-top: 36px; }
+.download {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px; border-radius: 12px;
+  background: var(--green); color: #fff; text-decoration: none;
+  font-weight: 700; font-size: 1.0625rem;
+  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, var(--shadow);
+}
+.download:hover { background: var(--green-deep); }
+.download svg { width: 18px; height: 18px; }
+.cta .meta { color: var(--muted); font-size: .9375rem; }
+
+.showcase { margin-top: 56px; border-radius: 16px; overflow: hidden; border: 1px solid var(--rule); background: var(--sheet); box-shadow: var(--shadow); }
+.caption { margin: 12px 0 0; color: var(--muted); font-size: .9375rem; }
+
+/* Facts */
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; padding: 64px 0 24px; }
+.facts h2 { margin: 0 0 8px; font-size: 1.25rem; line-height: 1.3; letter-spacing: -.01em; }
+.facts p { margin: 0; color: var(--muted); }
+.facts div { padding-top: 18px; border-top: 2px solid var(--ink); }
+
+/* Sections */
+.section { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; padding: 72px 0; border-top: 1px solid var(--rule); }
+.section h2 { margin: 0; font-size: 1.75rem; line-height: 1.15; letter-spacing: -.02em; position: sticky; top: 24px; align-self: start; }
+.section .text { max-width: 40em; }
+.section .text p { margin: 0 0 14px; }
+.section .text p.small { color: var(--muted); font-size: .9375rem; }
+.shot { margin-top: 20px; border-radius: 12px; overflow: hidden; border: 1px solid var(--rule); background: var(--sheet); }
+.shots { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 2fr); gap: 20px; margin-top: 20px; align-items: start; }
+.shots .shot { margin-top: 0; }
+.shots figcaption { margin-top: 8px; color: var(--muted); font-size: .875rem; }
+figure { margin: 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: .9875rem; }
+th, td { text-align: left; padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; }
+thead th { color: var(--muted); font-weight: 500; font-size: .875rem; }
+td:nth-child(2) { color: var(--muted); white-space: nowrap; }
+
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+ol.steps li { counter-increment: step; position: relative; padding: 0 0 22px 48px; }
+ol.steps li::before {
+  content: counter(step); position: absolute; left: 0; top: -.1em;
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--green) 18%, var(--sheet)); color: var(--green-deep); font-weight: 700;
+}
+pre {
+  margin: 10px 0 0; padding: 14px 16px; border-radius: 10px; overflow-x: auto;
+  background: var(--sheet); border: 1px solid var(--rule);
+  font: 500 .9rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+footer { padding: 40px 0 56px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9375rem; display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
+footer a { color: var(--muted); }
+
+@media (max-width: 860px) {
+  .section { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 56px 0; }
+  .section h2 { position: static; }
+  .facts { grid-template-columns: 1fr; gap: 24px; padding-top: 48px; }
+  .shots { grid-template-columns: 1fr; }
+  .hero { padding-top: 32px; }
+  .top nav .hide-sm { display: none; }
+}
+@media (max-width: 520px) {
+  td:nth-child(2) { white-space: normal; }
+  .hud .prompt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="brand" href="./"><img src="images/icon.png" alt="" width="36" height="36">SimpleWhisper</a>
+  <nav aria-label="Main">
+    <a class="hide-sm" href="#models">Models</a>
+    <a class="hide-sm" href="#install">Install</a>
+    <a href="https://github.com/mwgo/SimpleWhisper">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <div class="hud" aria-hidden="true">
+      <span class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="state">Recording</span>
+      <span class="prompt">Plain text</span>
+    </div>
+
+    <h1 id="headline" aria-label="Talk, and your words land wherever you type.">Talk, and your words land wherever you type.</h1>
+
+    <p class="lede">Press <kbd id="fn">fn</kbd>, speak, and SimpleWhisper types it into Word, Teams, VS Code, Mail or any other app. <strong>Transcribed on your Mac</strong>, free and open source.</p>
+
+    <div class="cta">
+      <a class="download" href="https://github.com/mwgo/SimpleWhisper/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14"/></svg>
+        <span>Download <span id="version">for macOS</span></span>
+      </a>
+      <span class="meta">macOS 26 on Apple Silicon. No account, no subscription.</span>
+    </div>
+
+    <figure class="showcase">
+      <img src="images/live-typing.gif" width="900" height="400" alt="Live typing: dictated text appears in the HUD editor as you speak">
+    </figure>
+    <p class="caption">Live typing: words appear as you speak, greyed while provisional, then confirmed at each pause.</p>
+  </section>
+
+  <section class="wrap facts" aria-label="Highlights">
+    <div>
+      <h2>One key, any app</h2>
+      <p>Tap <kbd>fn</kbd> to start and stop, or hold it to talk. The text goes wherever the cursor is.</p>
+    </div>
+    <div>
+      <h2>Stays on your Mac</h2>
+      <p>Whisper, Parakeet and Apple Speech run locally on Apple Silicon. A cloud engine is there only if you choose it.</p>
+    </div>
+    <div>
+      <h2>Polish it with AI</h2>
+      <p>Prompts clean up, format or translate a dictation. Command mode rewrites selected text with a spoken instruction.</p>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Tap, talk, done</h2>
+    <div class="text">
+      <p>A small HUD appears next to the caret while you speak. Tap <kbd>fn</kbd> again and the transcription is pasted in place. <kbd>Esc</kbd> cancels at any moment.</p>
+      <div class="shot"><img src="images/dictation.gif" width="900" height="260" loading="lazy" alt="Dictating a sentence into TextEdit"></div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Always know what it is doing</h2>
+    <div class="text">
+      <p>The HUD shows the microphone level while recording, a rainbow edge while transcribing and while an AI prompt runs, and folds away when it is done.</p>
+      <div class="shot"><img src="images/hud-states.gif" width="900" height="200" loading="lazy" alt="HUD states: recording, transcribing, processing, cancelled"></div>
+      <p style="margin-top:20px">It floats in Liquid Glass, tinted with one of nine colours.</p>
+      <div class="shot"><img src="images/themes.png" width="1714" height="384" loading="lazy" alt="The nine HUD colour themes"></div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Prompts and commands</h2>
+    <div class="text">
+      <p>Pick a prompt from the HUD, or press its letter while recording: Clean up, Formal email, Bullet points, Translate to English, or your own.</p>
+      <p>Select text, say what to do with it and press <kbd>Control</kbd>: the selection is replaced with the result. With nothing selected, your question goes to the assistant.</p>
+      <p class="small">Works with Claude Code, Codex, Gemini CLI, your own shell command, the Claude, OpenAI and Gemini APIs, or Apple Intelligence.</p>
+      <div class="shot"><img src="images/settings-prompts.png" width="1520" height="1104" loading="lazy" alt="Prompts settings"></div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Nowhere to paste? It waits for you</h2>
+    <div class="text">
+      <p>Dictating over a Finder window or a web page with no text field? The text stays in the HUD, still editable, with Copy and Close.</p>
+      <div class="shot"><img src="images/result-card.png" width="1600" height="380" loading="lazy" alt="Result card with Copy and Close buttons"></div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>History and settings</h2>
+    <div class="text">
+      <p>Keep a history of dictations if you want one, and tune models, hotkeys, the HUD, languages, vocabulary, voice macros and AI providers.</p>
+      <div class="shots">
+        <figure>
+          <div class="shot"><img src="images/history.png" width="880" height="1168" loading="lazy" alt="History window"></div>
+          <figcaption>History: click to copy, play to paste again.</figcaption>
+        </figure>
+        <figure>
+          <div class="shot"><img src="images/settings-general.png" width="1520" height="1104" loading="lazy" alt="General settings"></div>
+          <figcaption>General settings.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap section" id="models">
+    <h2>Speech models</h2>
+    <div class="text">
+      <table>
+        <thead><tr><th scope="col">Model</th><th scope="col">Runs</th><th scope="col">Good for</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Whisper Large v3 Turbo</th><td>On device, ~1.6 GB</td><td>Best quality, many languages</td></tr>
+          <tr><th scope="row">Whisper Large v3</th><td>On device, 626 MB</td><td>Smaller download</td></tr>
+          <tr><th scope="row">Whisper Small</th><td>On device, ~200 MB</td><td>Quick tests</td></tr>
+          <tr><th scope="row">Parakeet v3</th><td>On device, ~0.6 GB</td><td>Very fast, 25 European languages</td></tr>
+          <tr><th scope="row">Parakeet Ultra</th><td>On device, ~0.6 GB</td><td>Parakeet v3 post-trained for accuracy</td></tr>
+          <tr><th scope="row">Apple Speech</th><td>Built into macOS</td><td>No download</td></tr>
+          <tr><th scope="row">Gemini API</th><td>Cloud, your API key</td><td>Optional; the recording is sent to Google</td></tr>
+        </tbody>
+      </table>
+      <p class="small" style="margin-top:16px">A silence and hallucination filter keeps invented phrases like “Thank you.” out of your text.</p>
+    </div>
+  </section>
+
+  <section class="wrap section" id="install">
+    <h2>Install</h2>
+    <div class="text">
+      <ol class="steps">
+        <li>Download the latest <a href="https://github.com/mwgo/SimpleWhisper/releases/latest">SimpleWhisper zip</a>, unzip it and move SimpleWhisper to Applications.</li>
+        <li>The app is not notarized yet, so clear the quarantine flag once:
+          <pre><code>xattr -dr com.apple.quarantine /Applications/SimpleWhisper.app</code></pre>
+        </li>
+        <li>Open it and allow Microphone, Accessibility and Input Monitoring when asked.</li>
+        <li>Press <kbd>fn</kbd> and start talking. Turn on automatic updates in Settings › General › Updates.</li>
+      </ol>
+      <p class="small">Full documentation, hotkeys and building from source are in the <a href="https://github.com/mwgo/SimpleWhisper#documentation">README</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>SimpleWhisper is MIT licensed. Made by Marcin Wojas.</span>
+  <span><a href="https://github.com/mwgo/SimpleWhisper">Source on GitHub</a> &nbsp; <a href="https://github.com/mwgo/SimpleWhisper/releases">Releases</a></span>
+</footer>
+
+<script>
+(() => {
+  fetch("https://api.github.com/repos/mwgo/SimpleWhisper/releases/latest")
+    .then(r => r.ok ? r.json() : null)
+    .then(r => { if (r && r.tag_name) document.getElementById("version").textContent = r.tag_name.replace(/^v/, ""); })
+    .catch(() => {});
+
+  const headline = document.getElementById("headline");
+  const hud = document.querySelector(".hud");
+  const state = hud.querySelector(".state");
+  const bars = [...hud.querySelectorAll(".bars i")];
+  const fn = document.getElementById("fn");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { state.textContent = "Pasted"; return; }
+
+  // Dictated in three utterances: words arrive greyed, each utterance is confirmed at its pause.
+  const utterances = [["Talk,"], ["and", "your", "words", "land"], ["wherever", "you", "type."]];
+  headline.textContent = "";
+  const visual = document.createElement("span");
+  visual.setAttribute("aria-hidden", "true");
+  const words = utterances.map(u => u.map(text => {
+    const span = document.createElement("span");
+    span.className = "w hidden";
+    span.textContent = text;
+    return span;
+  }));
+  words.flat().forEach((span, index) => { if (index) visual.append(" "); visual.append(span); });
+  const caret = document.createElement("span");
+  caret.className = "caret";
+  visual.prepend(caret);
+  headline.append(visual);
+
+  let speaking = true;
+  const meter = setInterval(() => {
+    bars.forEach((bar, i) => {
+      const level = speaking ? 4 + Math.random() * 16 * (0.5 + 0.5 * Math.sin(Date.now() / 160 + i)) : 4;
+      bar.style.height = level.toFixed(1) + "px";
+    });
+  }, 90);
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  (async () => {
+    fn.classList.add("pressed");
+    await wait(160);
+    fn.classList.remove("pressed");
+    await wait(500);
+    for (const utterance of words) {
+      speaking = true;
+      for (const span of utterance) {
+        span.classList.replace("hidden", "pending");
+        span.after(caret);
+        await wait(260);
+      }
+      speaking = false;
+      await wait(380);
+      utterance.forEach(span => span.classList.remove("pending"));
+      await wait(260);
+    }
+    fn.classList.add("pressed");
+    await wait(160);
+    fn.classList.remove("pressed");
+    clearInterval(meter);
+    bars.forEach(bar => bar.style.height = "4px");
+    state.textContent = "Pasted";
+    caret.remove();
+  })();
+})();
+</script>
+</body>
+</html>
