@@ -20,5 +20,10 @@ let package = Package(
             path: "Sources/SimpleWhisper",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(
+            name: "SimpleWhisperIME",
+            path: "Sources/SimpleWhisperIME",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

@@ -99,6 +99,16 @@ final class HotkeyMonitor {
     /// The key that starts dictation (fn by default; left/right Command or Option).
     var triggerKey: HotkeyKey = .fn
 
+    /// Right Command + letter types a Polish letter (unless right Command is the dictation key).
+    var polishLetters = false
+    /// Key codes (QWERTY positions) of a c e l n o s x z and their Polish letters.
+    private static let polishLetterKeys: [Int64: Character] = [0: "ą", 8: "ć", 14: "ę", 37: "ł", 45: "ń", 31: "ó", 1: "ś", 7: "ź", 6: "ż"]
+    private static let rightCommandDeviceFlag: UInt64 = 0x10
+    private static let rightCommandKeyCode: Int64 = 54
+    private var rightCommandDown = false
+    /// Marks the letters this monitor types itself, so it lets them through untouched.
+    private static let syntheticMarker: Int64 = 0x5357_504c
+
     weak var delegate: HotkeyMonitorDelegate?
     var holdThreshold: TimeInterval = 0.4
     /// Any key within this window after fn started recording cancels it silently.
@@ -157,7 +167,21 @@ final class HotkeyMonitor {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
+        if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker {
+            return Unmanaged.passUnretained(event)
+        }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        if type == .flagsChanged, keyCode == Self.rightCommandKeyCode {
+            rightCommandDown = event.flags.contains(.maskCommand)
+        }
+        if type == .keyDown, polishLetters, triggerKey != .rightCommand, event.flags.contains(.maskCommand),
+           rightCommandDown || event.flags.rawValue & Self.rightCommandDeviceFlag != 0,
+           !event.flags.contains(.maskControl), !event.flags.contains(.maskAlternate),
+           let letter = Self.polishLetterKeys[keyCode] {
+            let capital = event.flags.contains(.maskShift) != event.flags.contains(.maskAlphaShift)
+            Self.type(capital ? Character(letter.uppercased()) : letter)
+            return nil
+        }
         var live = false
         MainActor.assumeIsolated { live = delegate?.isLiveEditing ?? false }
         switch type {
@@ -226,6 +250,18 @@ final class HotkeyMonitor {
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    /// Types `letter` into the frontmost app as if from the keyboard, without modifiers.
+    private static func type(_ letter: Character) {
+        let units = Array(String(letter).utf16)
+        for keyDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: keyDown) else { continue }
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
+            event.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+            event.post(tap: .cgSessionEventTap)
+        }
     }
 
     private func promptShortcut(_ character: String) -> Bool {

@@ -21,6 +21,11 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     var textShadow = false { didSet { applyColors() } }
     /// The user clicked, moved the caret or typed (not our own insertions).
     var onUserEdit: () -> Void = {}
+    /// Called after every programmatic change (previews, final chunks), to mirror the text elsewhere.
+    var onContentChange: () -> Void = {}
+    /// Leading and trailing characters that are only context from the target app (text around its caret), not dictation.
+    private var contextLength = 0
+    private var suffixLength = 0
     private var programmaticChange = false
 
     override init() {
@@ -73,6 +78,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         textView.isEditable = true
         textView.string = ""
         anchors = [:]
+        contextLength = 0
+        suffixLength = 0
         textView.undoManager?.removeAllActions()
         textView.typingAttributes = normalAttributes
         updateSize()
@@ -84,6 +91,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         defer { programmaticChange = false }
         textView.isEditable = true
         anchors = [:]
+        contextLength = 0
+        suffixLength = 0
         textView.string = text
         textView.textStorage?.setAttributes(normalAttributes, range: NSRange(location: 0, length: (text as NSString).length))
         textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
@@ -105,6 +114,49 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     }
 
     var hasPendingChunks: Bool { !anchors.isEmpty }
+
+    /// Surrounds the caret with the target app's text, so chunks get the right spaces and capitalisation;
+    /// the context is never part of `dictation`.
+    func seedContext(before: String, after: String) {
+        guard let storage = textView.textStorage else { return }
+        // Pending chunks keep their place inside the dictation while the context around it is replaced.
+        let relative = anchors.mapValues { NSRange(location: $0.location - contextLength, length: $0.length) }
+        programmaticChange = true
+        defer { programmaticChange = false }
+        storage.replaceCharacters(in: NSRange(location: storage.length - suffixLength, length: suffixLength),
+                                  with: NSAttributedString(string: after, attributes: normalAttributes))
+        storage.replaceCharacters(in: NSRange(location: 0, length: contextLength),
+                                  with: NSAttributedString(string: before, attributes: normalAttributes))
+        contextLength = (before as NSString).length
+        suffixLength = (after as NSString).length
+        anchors = relative.mapValues { NSRange(location: $0.location + contextLength, length: $0.length) }
+        textView.setSelectedRange(NSRange(location: storage.length - suffixLength, length: 0))
+    }
+
+    /// Dictated text between the context, previews included, as shown in the target app while dictating.
+    var shownDictation: String { between(textView.string as NSString) }
+
+    /// Dictated text between the context without pending previews, with its fitted spaces.
+    var dictation: String {
+        let result = NSMutableString(string: textView.string)
+        for range in anchors.values.sorted(by: { $0.location > $1.location }) where range.length > 0 {
+            result.replaceCharacters(in: range, with: "")
+        }
+        return between(result)
+    }
+
+    private func between(_ string: NSString) -> String {
+        let start = min(contextLength, string.length)
+        return string.substring(with: NSRange(location: start, length: max(0, string.length - suffixLength - start)))
+    }
+
+    /// Everything so far was committed in the target app: it becomes context. Chunks whose preview is
+    /// already in the app are forgotten; those not shown yet will land at the caret.
+    func freeze() {
+        contextLength = (textView.string as NSString).length - suffixLength
+        anchors = anchors.filter { $0.value.length == 0 }.mapValues { _ in NSRange(location: contextLength, length: 0) }
+        textView.setSelectedRange(NSRange(location: contextLength, length: 0))
+    }
 
     /// Marks the caret as the spot where the next dictated chunk lands and returns its id.
     /// Nothing is inserted; a selection is removed so the dictation replaces it.
@@ -169,6 +221,7 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         textView.typingAttributes = normalAttributes
         textView.scrollRangeToVisible(textView.selectedRange())
         updateSize()
+        onContentChange()
     }
 
     /// Keeps the pending spots in place while the text before them changes (typing, pasting, other chunks).

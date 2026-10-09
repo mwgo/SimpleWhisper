@@ -1,4 +1,5 @@
 import SwiftUI
+import Carbon
 import AppKit
 import ServiceManagement
 
@@ -91,6 +92,8 @@ struct GeneralSettingsView: View {
                 if settings.fnDoublePress {
                     Stepper("Double-press window: \(settings.doublePressWindowMs) ms", value: Binding(get: { settings.doublePressWindowMs }, set: { settings.doublePressWindowMs = $0; controller.applyHotkeySettings() }), in: 200...800, step: 50)
                 }
+                Toggle("Right ⌘ + a c e l n o s x z types ą ć ę ł ń ó ś ź ż", isOn: Binding(get: { settings.polishRightCommand }, set: { settings.polishRightCommand = $0; controller.applyHotkeySettings() }))
+                    .disabled(settings.hotkeyKey == .rightCommand)
                 if settings.hotkeyKey == .fn {
                     Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -136,6 +139,7 @@ struct GeneralSettingsView: View {
                 Toggle("Live typing", isOn: Binding(get: { settings.liveTypingEnabled }, set: { settings.liveTypingEnabled = $0 }))
                 Text("An editor opens under the HUD and fills with text at every pause. Click to move the caret and keep dictating there, or edit with the keyboard. Stop dictation (fn, or release fn in push-to-talk) to insert the text; Esc discards it.")
                     .font(.caption).foregroundStyle(.secondary)
+                if settings.liveTypingEnabled { InputSourceRow() }
             }
             Section("History") {
                 Toggle("Keep a history of recent dictations and commands", isOn: Binding(get: { settings.historyEnabled }, set: { settings.historyEnabled = $0 }))
@@ -869,6 +873,58 @@ struct AboutView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Live typing straight into apps through the SimpleWhisper input source.
+private struct InputSourceRow: View {
+    @State private var status = InputSourceBridge.status
+    @State private var installError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Type straight into apps")
+                Spacer()
+                switch status {
+                case .unavailable:
+                    Text("Not in this build").foregroundStyle(.secondary)
+                case .notInstalled:
+                    Button("Install input source") {
+                        do { try InputSourceBridge.install(); InputSourceBridge.openKeyboardSettings() } catch { installError = error.localizedDescription }
+                        status = InputSourceBridge.status
+                    }
+                case .notEnabled:
+                    Button("Open Keyboard Settings") { InputSourceBridge.openKeyboardSettings() }
+                case .notSelected:
+                    Text("Input source not selected").foregroundStyle(.secondary)
+                case .selected:
+                    Label("Active", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+            }
+            Text(caption).font(.caption).foregroundStyle(.secondary)
+            if let installError { Text(installError).font(.caption).foregroundStyle(.red) }
+        }
+        .onReceive(DistributedNotificationCenter.default().publisher(for: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String))) { _ in
+            status = InputSourceBridge.status
+        }
+        .onReceive(DistributedNotificationCenter.default().publisher(for: Notification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String))) { _ in
+            status = InputSourceBridge.status
+        }
+        .onAppear { status = InputSourceBridge.status }
+    }
+
+    private var caption: String {
+        switch status {
+        case .unavailable, .notInstalled:
+            return "With the SimpleWhisper input source selected, the dictation appears right in the app as underlined text and is inserted when you stop, with no editor in the HUD."
+        case .notEnabled:
+            return "In Keyboard › Text Input › Input Sources › Edit…, press +, choose English › SimpleWhisper, then select it in the input menu instead of your keyboard layout. Keys keep your current layout."
+        case .notSelected:
+            return "Select SimpleWhisper in the input menu (menu bar) instead of your keyboard layout to dictate straight into apps; keys keep your current layout. Until then the HUD editor is used."
+        case .selected:
+            return "The dictation appears in the app as underlined text and is inserted when you stop. Where the app does not answer, the HUD editor is used."
+        }
     }
 }
 

@@ -59,6 +59,12 @@ final class DictationController: HotkeyMonitorDelegate {
     private var livePreviewLoop: Task<Void, Never>?
     /// Latest preview per placeholder: a final result never replaces a longer preview.
     private var livePreviews: [String: String] = [:]
+    /// Live typing goes through the SimpleWhisper input method: the dictation is marked text in the app.
+    private let inputSource = InputSourceBridge()
+    private var imeSession = false
+    /// Bumped whenever the user commits the marked text in the app (typing, clicking, switching apps).
+    private var imeCommits = 0
+    private var contextRefresh: Task<Void, Never>?
 
     init() {
         recorder.onLevel = { [weak self] level in
@@ -67,6 +73,13 @@ final class DictationController: HotkeyMonitorDelegate {
         liveEditor.onUserEdit = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.closeActiveUtterance() } }
         }
+        liveEditor.onContentChange = { [weak self] in
+            guard let self, self.imeSession else { return }
+            self.inputSource.mark(self.liveEditor.shownDictation)
+        }
+        inputSource.onCommitted = { [weak self] in self?.inputMethodCommitted() }
+        inputSource.onInput = { [weak self] in self?.scheduleContextRefresh() }
+        InputSourceBridge.updateInstalledCopy()
         recorder.onSegmentsAvailable = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.drainLiveSegments() } }
         }
@@ -121,10 +134,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     func startHotkey() {
         hotkey.delegate = self
-        hotkey.triggerKey = settings.hotkeyKey
-        hotkey.holdThreshold = Double(settings.holdThresholdMs) / 1000
-        hotkey.doublePressMode = settings.fnDoublePress
-        hotkey.doublePressWindow = Double(settings.doublePressWindowMs) / 1000
+        applyHotkeySettings()
         do {
             try hotkey.start()
             state.hotkeyError = nil
@@ -160,6 +170,7 @@ final class DictationController: HotkeyMonitorDelegate {
         hotkey.holdThreshold = Double(settings.holdThresholdMs) / 1000
         hotkey.doublePressMode = settings.fnDoublePress
         hotkey.doublePressWindow = Double(settings.doublePressWindowMs) / 1000
+        hotkey.polishLetters = settings.polishRightCommand
     }
 
     // MARK: Model loading
@@ -263,6 +274,8 @@ final class DictationController: HotkeyMonitorDelegate {
         paster.rememberTarget()
         pasteTargetAvailable = PasteTargetProbe.canPasteIntoFocusedElement()
         liveSession = settings.liveTypingEnabled
+        imeSession = false
+        let throughInputMethod = liveSession && InputSourceBridge.status == .selected
         recorder.segmentsEnabled = liveSession
         if liveSession {
             liveGeneration += 1
@@ -290,12 +303,13 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.glass = settings.hudGlass
         hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording,
                  commandButton: settings.commandModeEnabled && !liveSession,
-                 liveEditor: liveSession ? liveEditor : nil)
+                 liveEditor: liveSession && !throughInputMethod ? liveEditor : nil)
         state.hudAnchor = hud.anchorDescription
         DebugLog.write("HUD \(hud.anchorDebug ?? "-")")
         if engines[settings.engineKind]?.isReady != true {
             Task { await loadModel() }
         }
+        if throughInputMethod { connectInputMethod() }
         if liveSession { startLivePreviewLoop() }
     }
 
@@ -479,8 +493,10 @@ final class DictationController: HotkeyMonitorDelegate {
         endActivity()
         if settings.soundsEnabled { SoundPlayer.recordingCancelled() }
         if liveSession {
+            let throughInputMethod = imeSession
             endLiveSession()
-            let text = liveEditor.text
+            let text = throughInputMethod ? liveEditor.dictation.trimmingCharacters(in: .whitespaces) : liveEditor.text
+            if throughInputMethod { Task { [inputSource] in _ = await inputSource.insert("") } }
             if !text.isEmpty {
                 recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
             }
@@ -500,6 +516,9 @@ final class DictationController: HotkeyMonitorDelegate {
         livePreviewLoop = nil
         liveActiveID = nil
         liveSession = false
+        if imeSession { inputSource.setSessionActive(false) }
+        imeSession = false
+        contextRefresh?.cancel()
         recorder.segmentsEnabled = false
     }
 
@@ -636,12 +655,19 @@ final class DictationController: HotkeyMonitorDelegate {
     private func finishLiveTyping(samples: [Float]) async {
         guard !Task.isCancelled, liveSession, state.phase != .idle else { return }
         if !samples.isEmpty { Self.saveLastRecording(samples) }
-        var text = liveEditor.text
+        let throughInputMethod = imeSession
+        let dictated = throughInputMethod ? liveEditor.dictation : liveEditor.text
+        // With the input method the spaces next to the existing text are already fitted; keep them.
+        let leading = String(dictated.prefix { $0.isWhitespace })
+        let trailing = String(dictated.reversed().prefix { $0.isWhitespace }.reversed())
+        var text = dictated.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             endLiveSession()
+            if throughInputMethod { _ = await inputSource.insert("") }
             dismissQuietly(reason: .noSpeech)
             return
         }
+        let commits = imeCommits
         do {
             if let prompt = selectedPrompt {
                 liveEditor.textView.isEditable = false
@@ -656,8 +682,66 @@ final class DictationController: HotkeyMonitorDelegate {
         state.lastLanguage = liveLanguage
         state.phase = .idle
         recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
-        await deliver(text, canPaste: pasteTargetAvailable, animatedHide: false)
+        if throughInputMethod {
+            hud.hide(animated: false)
+            if imeCommits != commits {
+                DebugLog.write("Marked text was committed in the app while the prompt ran; not inserting the result")
+            } else if !(await inputSource.insert(leading + text + trailing)) {
+                DebugLog.write("Input method did not confirm the insert; delivering the usual way")
+                await deliver(text, animatedHide: false)
+            }
+        } else {
+            await deliver(text, canPaste: pasteTargetAvailable, animatedHide: false)
+        }
         endActivity()
+    }
+
+    // MARK: Input method
+
+    /// Asks the input method for the focused field of the app being dictated into; without an answer
+    /// the session falls back to the HUD editor.
+    private func connectInputMethod() {
+        let generation = liveGeneration
+        let app = NSWorkspace.shared.frontmostApplication
+        Task { [weak self] in
+            guard let self else { return }
+            let before = await self.inputSource.connect(to: app)
+            guard generation == self.liveGeneration, self.liveSession, self.state.phase == .recording else { return }
+            if let context = before {
+                self.liveEditor.seedContext(before: context.before, after: context.after)
+                self.imeSession = true
+                self.inputSource.setSessionActive(true)
+                DebugLog.write("Live typing through the input method in \(app?.bundleIdentifier ?? "?") (context \(context.before.count) + \(context.after.count) chars)")
+            } else {
+                DebugLog.write("Input method did not answer; Live typing in the HUD editor")
+                self.hud.show(text: "Recording", detail: self.selectedPrompt?.name, stage: .recording, liveEditor: self.liveEditor)
+            }
+        }
+    }
+
+    /// The user typed, clicked or switched apps: the marked text stays where it is, and the dictation
+    /// continues at the new caret.
+    private func inputMethodCommitted() {
+        guard imeSession, liveSession else { return }
+        imeCommits += 1
+        if state.phase == .recording { closeActiveUtterance() }
+        liveEditor.freeze()
+        scheduleContextRefresh()
+    }
+
+    /// Re-reads the text around the caret once the app has taken the user's keys or click.
+    private func scheduleContextRefresh() {
+        guard imeSession, liveSession else { return }
+        let generation = liveGeneration
+        contextRefresh?.cancel()
+        contextRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled, generation == self.liveGeneration,
+                  let context = await self.inputSource.connect(to: NSWorkspace.shared.frontmostApplication),
+                  generation == self.liveGeneration else { return }
+            self.liveEditor.seedContext(before: context.before, after: context.after)
+            DebugLog.write("Input method: context at the caret \(context.before.count) + \(context.after.count) chars")
+        }
     }
 
     private func beginActivity() {

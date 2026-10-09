@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>SimpleWhisperIME</string>
+	<key>CFBundleIdentifier</key>
+	<string>pl.wojas.inputmethod.SimpleWhisper</string>
+	<key>CFBundleName</key>
+	<string>SimpleWhisper</string>
+	<key>CFBundleDisplayName</key>
+	<string>SimpleWhisper</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.6.0</string>
+	<key>CFBundleVersion</key>
+	<string>6</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>InputMethodConnectionName</key>
+	<string>pl.wojas.inputmethod.SimpleWhisper_Connection</string>
+	<key>InputMethodServerControllerClass</key>
+	<string>SWInputController</string>
+	<key>TISInputSourceID</key>
+	<string>pl.wojas.inputmethod.SimpleWhisper</string>
+	<key>TISIntendedLanguage</key>
+	<string>en</string>
+	<key>tsInputMethodCharacterRepertoireKey</key>
+	<array>
+		<string>Latn</string>
+	</array>
+	<key>tsInputMethodIconFileKey</key>
+	<string>MenuIconTemplate.tiff</string>
+	<key>TISIconIsTemplate</key>
+	<true/>
+</dict>
+</plist>

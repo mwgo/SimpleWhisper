@@ -96,6 +96,25 @@ enum AXFocus {
         return nil
     }
 
+    /// Up to 80 characters before and 40 after the caret of the focused text element, when it exposes them.
+    static func textAroundCaret() -> (before: String, after: String)? {
+        guard let element = focusedTextElement() else { return nil }
+        var valueRef: CFTypeRef?
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String,
+              AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeRef as! AXValue, .cfRange, &range) else { return nil }
+        let text = value as NSString
+        let start = min(max(range.location, 0), text.length)
+        let end = min(start + max(range.length, 0), text.length)
+        let beforeStart = max(0, start - 80)
+        return (text.substring(with: NSRange(location: beforeStart, length: start - beforeStart)),
+                text.substring(with: NSRange(location: end, length: min(40, text.length - end))))
+    }
+
     /// True for nodes inside a `contenteditable` region (Chromium/WebKit expose `AXEditableAncestor`).
     static func hasEditableAncestor(_ element: AXUIElement) -> Bool {
         var ref: CFTypeRef?

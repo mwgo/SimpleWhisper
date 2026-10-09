@@ -21,10 +21,22 @@ for bundle in "$BIN_DIR"/*.bundle(N); do cp -R "$bundle" "$APP/Contents/Resource
 for framework in "$BIN_DIR"/*.framework(N); do cp -R "$framework" "$APP/Contents/Frameworks/"; done
 for dylib in "$BIN_DIR"/*.dylib(N); do cp -R "$dylib" "$APP/Contents/Frameworks/"; done
 
+# Input method for Live typing straight into apps (installed from Settings into ~/Library/Input Methods).
+IME="$APP/Contents/Library/Input Methods/SimpleWhisperIME.app"
+mkdir -p "$IME/Contents/MacOS" "$IME/Contents/Resources"
+cp "$BIN_DIR/SimpleWhisperIME" "$IME/Contents/MacOS/"
+cp Resources/IME/Info.plist "$IME/Contents/"
+cp Resources/AppIcon.icns Resources/IME/MenuIconTemplate.tiff "$IME/Contents/Resources/"
+for key in CFBundleShortVersionString CFBundleVersion; do
+  /usr/libexec/PlistBuddy -c "Set :$key $(/usr/libexec/PlistBuddy -c "Print :$key" Resources/Info.plist)" "$IME/Contents/Info.plist"
+done
+codesign --force --sign - --identifier pl.wojas.inputmethod.SimpleWhisper \
+  -r='designated => identifier "pl.wojas.inputmethod.SimpleWhisper"' "$IME"
+
 # Ad-hoc signature with an explicit designated requirement based only on the bundle identifier.
 # TCC stores that requirement when you grant Accessibility / Input Monitoring / Microphone, so the
 # grants survive rebuilds (a plain ad-hoc signature is keyed to the binary hash and breaks every build).
-codesign --force --deep --sign - --identifier pl.wojas.SimpleWhisper \
+codesign --force --sign - --identifier pl.wojas.SimpleWhisper \
   -r='designated => identifier "pl.wojas.SimpleWhisper"' "$APP"
 
 echo "Built $APP"
