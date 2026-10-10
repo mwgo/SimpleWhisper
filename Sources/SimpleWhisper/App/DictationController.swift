@@ -64,6 +64,8 @@ final class DictationController: HotkeyMonitorDelegate {
     private var imeSession = false
     /// Bumped whenever the user commits the marked text in the app (typing, clicking, switching apps).
     private var imeCommits = 0
+    /// Finished utterances already inserted in the app during this dictation.
+    private var imeDelivered = ""
     private var contextRefresh: Task<Void, Never>?
 
     init() {
@@ -275,6 +277,7 @@ final class DictationController: HotkeyMonitorDelegate {
         pasteTargetAvailable = PasteTargetProbe.canPasteIntoFocusedElement()
         liveSession = settings.liveTypingEnabled
         imeSession = false
+        imeDelivered = ""
         let throughInputMethod = liveSession && InputSourceBridge.status == .selected
         recorder.segmentsEnabled = liveSession
         if liveSession {
@@ -495,7 +498,7 @@ final class DictationController: HotkeyMonitorDelegate {
         if liveSession {
             let throughInputMethod = imeSession
             endLiveSession()
-            let text = throughInputMethod ? liveEditor.dictation.trimmingCharacters(in: .whitespaces) : liveEditor.text
+            let text = throughInputMethod ? (imeDelivered + liveEditor.dictation).trimmingCharacters(in: .whitespacesAndNewlines) : liveEditor.text
             if throughInputMethod { Task { [inputSource] in _ = await inputSource.insert("") } }
             if !text.isEmpty {
                 recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
@@ -561,12 +564,12 @@ final class DictationController: HotkeyMonitorDelegate {
         }
     }
 
-    /// About once a second, re-transcribes the utterance in progress and shows it greyed in the editor.
+    /// Every 0.4 s (when the previous one has finished), re-transcribes the utterance in progress and shows it greyed in the editor.
     private func startLivePreviewLoop() {
         livePreviewLoop?.cancel()
         livePreviewLoop = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(900))
+                try? await Task.sleep(for: .milliseconds(400))
                 guard let self, !Task.isCancelled, self.liveSession, self.state.phase == .recording else { return }
                 self.schedulePreview()
             }
@@ -619,6 +622,7 @@ final class DictationController: HotkeyMonitorDelegate {
             liveLanguage = transcription?.detectedLanguage ?? liveLanguage
             DebugLog.write("Live chunk \(String(format: "%.1f", Double(samples.count) / 16_000)) s → \(text.count) chars")
             liveEditor.resolve(id, with: text)
+            commitFinishedText()
         } catch {
             guard generation == liveGeneration, final else { return }
             DebugLog.write("Live chunk failed: \(error)")
@@ -661,10 +665,15 @@ final class DictationController: HotkeyMonitorDelegate {
         let leading = String(dictated.prefix { $0.isWhitespace })
         let trailing = String(dictated.reversed().prefix { $0.isWhitespace }.reversed())
         var text = dictated.trimmingCharacters(in: .whitespacesAndNewlines)
+        let delivered = imeDelivered
         guard !text.isEmpty else {
             endLiveSession()
             if throughInputMethod { _ = await inputSource.insert("") }
-            dismissQuietly(reason: .noSpeech)
+            if delivered.isEmpty {
+                dismissQuietly(reason: .noSpeech)
+            } else {
+                finishDelivered(delivered.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
             return
         }
         let commits = imeCommits
@@ -678,10 +687,11 @@ final class DictationController: HotkeyMonitorDelegate {
         }
         guard state.phase != .idle else { return }
         endLiveSession()
-        state.lastText = text
+        let whole = (delivered + leading + text).trimmingCharacters(in: .whitespacesAndNewlines)
+        state.lastText = whole
         state.lastLanguage = liveLanguage
         state.phase = .idle
-        recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
+        recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: whole, language: liveLanguage))
         if throughInputMethod {
             hud.hide(animated: false)
             if imeCommits != commits {
@@ -696,7 +706,28 @@ final class DictationController: HotkeyMonitorDelegate {
         endActivity()
     }
 
+    /// Everything was already inserted in the app utterance by utterance.
+    private func finishDelivered(_ text: String) {
+        state.lastText = text
+        state.lastLanguage = liveLanguage
+        state.phase = .idle
+        recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: liveLanguage))
+        hud.hide(animated: false)
+        endActivity()
+    }
+
     // MARK: Input method
+
+    /// Through the input method, finished utterances go into the app as plain text and only the one in
+    /// progress stays marked. With a prompt selected everything stays marked, so the prompt sees all of it.
+    private func commitFinishedText() {
+        guard imeSession, state.phase == .recording, selectedPrompt == nil else { return }
+        let finished = liveEditor.takeFinished()
+        guard !finished.isEmpty else { return }
+        imeDelivered += finished
+        inputSource.commit(finished, keepingMarked: liveEditor.shownDictation)
+        DebugLog.write("Input method: inserted a finished utterance (\(finished.count) chars)")
+    }
 
     /// Asks the input method for the focused field of the app being dictated into; without an answer
     /// the session falls back to the HUD editor.

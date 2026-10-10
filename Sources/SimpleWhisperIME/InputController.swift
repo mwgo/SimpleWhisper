@@ -107,6 +107,12 @@ final class IMEBridge: NSObject {
         case "mark":
             marked = text
             client.setMarkedText(text, selectionRange: NSRange(location: (text as NSString).length, length: 0), replacementRange: Self.none)
+        case "commit":
+            client.insertText(text, replacementRange: Self.none)
+            marked = info["marked"] as? String ?? ""
+            if !marked.isEmpty {
+                client.setMarkedText(marked, selectionRange: NSRange(location: (marked as NSString).length, length: 0), replacementRange: Self.none)
+            }
         case "insert":
             marked = ""
             if text.isEmpty {

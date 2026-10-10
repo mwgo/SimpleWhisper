@@ -57,6 +57,11 @@ final class InputSourceBridge {
         post("mark", text: text, token: "")
     }
 
+    /// Replaces the marked text with `text` as plain text and marks `marked` after it.
+    func commit(_ text: String, keepingMarked marked: String) {
+        post("commit", text: text, token: "", marked: marked)
+    }
+
     /// Replaces the marked text with `text` (empty removes it); false when the client did not confirm.
     func insert(_ text: String) async -> Bool {
         await send("insert", text: text)?["event"] == "done"
@@ -74,10 +79,10 @@ final class InputSourceBridge {
         }
     }
 
-    private func post(_ op: String, text: String, token: String) {
+    private func post(_ op: String, text: String, token: String, marked: String = "") {
         DistributedNotificationCenter.default().postNotificationName(
             Self.commandName, object: nil,
-            userInfo: ["op": op, "text": text, "token": token, "target": target], deliverImmediately: true)
+            userInfo: ["op": op, "text": text, "token": token, "target": target, "marked": marked], deliverImmediately: true)
     }
 
     private func received(_ info: [String: String]) {

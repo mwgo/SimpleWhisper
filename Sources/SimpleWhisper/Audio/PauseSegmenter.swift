@@ -8,9 +8,11 @@ struct PauseSegmenter {
     /// A frame is silence when it is within this many dB of the noise floor.
     var silenceMarginDB: Double = 8
     var minSpeech: Double = 0.3
-    var minPause: Double = 0.7
+    var minPause: Double = 1.0
     /// Without a pause, cut anyway after this long (at the quietest recent moment); stays under Whisper's 30 s window.
     var maxSegment: Double = 25
+    /// Louder bursts shorter than this (wind, a knock, echo) do not end a pause.
+    var minBurst: Double = 0.15
 
     private let frameLength = 480   // 30 ms
     /// Noise floor = 10th percentile of the last ~9 s of frame levels.
@@ -22,6 +24,7 @@ struct PauseSegmenter {
     var hasSpeech: Bool { speechSamples > 0 }
     private var speechSamples = 0
     private var silenceRun = 0
+    private var burstRun = 0
     /// Energy of the last few frames (≈ 90 ms), smoothing out single loud frames inside pauses.
     private var recentEnergy: [Double] = []
     private var recentLevels: [Double] = []
@@ -34,6 +37,7 @@ struct PauseSegmenter {
         segmentStart = 0
         speechSamples = 0
         silenceRun = 0
+        burstRun = 0
         recentEnergy = []
         recentLevels = []
         recentFrames = []
@@ -80,8 +84,10 @@ struct PauseSegmenter {
 
         if decibels > noiseFloor + silenceMarginDB {
             speechSamples += frame.count
-            silenceRun = 0
+            burstRun += frame.count
+            if Double(burstRun) >= minBurst * sampleRate { silenceRun = 0 } else { silenceRun += frame.count }
         } else {
+            burstRun = 0
             silenceRun += frame.count
         }
 

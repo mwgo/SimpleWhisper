@@ -150,6 +150,17 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         return string.substring(with: NSRange(location: start, length: max(0, string.length - suffixLength - start)))
     }
 
+    /// Moves the finished start of the dictation (up to the first chunk still waiting for its final text)
+    /// into the context and returns it.
+    func takeFinished() -> String {
+        let storage = textView.string as NSString
+        let end = anchors.values.map(\.location).min() ?? storage.length - suffixLength
+        guard end > contextLength else { return "" }
+        let finished = storage.substring(with: NSRange(location: contextLength, length: end - contextLength))
+        contextLength = end
+        return finished
+    }
+
     /// Everything so far was committed in the target app: it becomes context. Chunks whose preview is
     /// already in the app are forgotten; those not shown yet will land at the caret.
     func freeze() {
