@@ -62,6 +62,8 @@ final class DictationController: HotkeyMonitorDelegate {
     /// Live typing goes through the SimpleWhisper input method: the dictation is marked text in the app.
     private let inputSource = InputSourceBridge()
     private var imeSession = false
+    /// The app the input method session types into; the dictation never follows focus to another app.
+    private var imeApp: NSRunningApplication?
     /// Bumped whenever the user commits the marked text in the app (typing, clicking, switching apps).
     private var imeCommits = 0
     /// Finished utterances already inserted in the app during this dictation.
@@ -260,6 +262,16 @@ final class DictationController: HotkeyMonitorDelegate {
             stopAndTranscribe()
         case .transcribing, .processing:
             returnAfterDelivery = true
+        }
+        return true
+    }
+
+    func hotkeyReturnInInputMethod(flags: CGEventFlags) -> Bool {
+        guard imeSession, liveSession, state.phase == .recording else { return false }
+        // Chromium apps drop the composition when it is committed while they handle the same key.
+        Task { [inputSource] in
+            _ = await inputSource.flush()
+            HotkeyMonitor.pressReturn(flags: flags)
         }
         return true
     }
@@ -771,6 +783,7 @@ final class DictationController: HotkeyMonitorDelegate {
     private func connectInputMethod() {
         let generation = liveGeneration
         let app = NSWorkspace.shared.frontmostApplication
+        imeApp = app
         Task { [weak self] in
             guard let self else { return }
             let before = await self.inputSource.connect(to: app)
@@ -805,7 +818,8 @@ final class DictationController: HotkeyMonitorDelegate {
         contextRefresh = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled, generation == self.liveGeneration,
-                  let context = await self.inputSource.connect(to: NSWorkspace.shared.frontmostApplication),
+                  let app = self.imeApp, NSWorkspace.shared.frontmostApplication == app,
+                  let context = await self.inputSource.connect(to: app),
                   generation == self.liveGeneration else { return }
             self.liveEditor.seedContext(before: context.before, after: context.after)
             DebugLog.write("Input method: context at the caret \(context.before.count) + \(context.after.count) chars")

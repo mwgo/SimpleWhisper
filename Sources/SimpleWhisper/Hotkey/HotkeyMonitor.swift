@@ -19,6 +19,9 @@ protocol HotkeyMonitorDelegate: AnyObject {
     func hotkeyPromptShortcut(_ character: String) -> Bool
     /// Return pressed during a dictation: finish it and press Return after the text. Returns true if handled.
     func hotkeyReturn() -> Bool
+    /// Return with modifiers (Shift+Return…) while the dictation is marked text in the app: commit it first,
+    /// then press the key again. Returns true if handled.
+    func hotkeyReturnInInputMethod(flags: CGEventFlags) -> Bool
     /// Live typing editor is open: keys belong to the editor (only fn and Esc keep their meaning).
     var isLiveEditing: Bool { get }
 }
@@ -253,14 +256,17 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
-            } else if Self.returnKeyCodes.contains(keyCode), !recentlyStartedByFn, fnDownAt == nil || pushToTalkActive,
-                      // Only a bare Return; the dictation key held for push-to-talk does not count.
-                      event.flags.intersection(Self.stateFlags).subtracting(pushToTalkActive ? triggerKey.flag : []).isEmpty {
-                var handled = false
-                MainActor.assumeIsolated { handled = delegate?.hotkeyReturn() ?? false }
-                if handled {
+            } else if Self.returnKeyCodes.contains(keyCode), !recentlyStartedByFn, fnDownAt == nil || pushToTalkActive {
+                // The dictation key held for push-to-talk does not count as a modifier.
+                let flags = event.flags.intersection(Self.stateFlags).subtracting(pushToTalkActive ? triggerKey.flag : [])
+                var finished = false, forwarded = false
+                MainActor.assumeIsolated {
+                    finished = flags.isEmpty && delegate?.hotkeyReturn() == true
+                    forwarded = !finished && delegate?.hotkeyReturnInInputMethod(flags: flags) == true
+                }
+                if finished || forwarded {
                     cancelHold()
-                    pushToTalkActive = false
+                    if finished { pushToTalkActive = false }
                     comboUsed = true
                     return nil
                 }
@@ -296,11 +302,11 @@ final class HotkeyMonitor {
         Self.type(Character(scalar))
     }
 
-    /// Presses Return in the frontmost app (after a dictation finished with Return).
-    static func pressReturn() {
+    /// Presses Return (with `flags`) in the frontmost app.
+    static func pressReturn(flags: CGEventFlags = []) {
         for keyDown in [true, false] {
             guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: keyDown) else { continue }
-            event.flags = []
+            event.flags = flags
             event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
             event.post(tap: .cgSessionEventTap)
         }

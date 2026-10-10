@@ -62,6 +62,11 @@ final class InputSourceBridge {
         post("commit", text: text, token: "", marked: marked)
     }
 
+    /// Commits the marked text in the app as it is (the app reports it as committed); false without confirmation.
+    func flush() async -> Bool {
+        await send("flush")?["event"] == "done"
+    }
+
     /// Replaces the marked text with `text` (empty removes it); false when the client did not confirm.
     func insert(_ text: String) async -> Bool {
         await send("insert", text: text)?["event"] == "done"

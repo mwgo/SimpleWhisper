@@ -107,6 +107,8 @@ final class IMEBridge: NSObject {
         case "mark":
             marked = text
             client.setMarkedText(text, selectionRange: NSRange(location: (text as NSString).length, length: 0), replacementRange: Self.none)
+        case "flush":
+            if let controller { commitPending(for: controller, reason: "flush") }
         case "commit":
             client.insertText(text, replacementRange: Self.none)
             marked = info["marked"] as? String ?? ""
