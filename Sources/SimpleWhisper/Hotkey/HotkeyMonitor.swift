@@ -17,6 +17,8 @@ protocol HotkeyMonitorDelegate: AnyObject {
     /// A character typed while recording: selects the prompt with that shortcut (space = no prompt).
     /// Returns true when consumed (the key is then swallowed).
     func hotkeyPromptShortcut(_ character: String) -> Bool
+    /// Return pressed during a dictation: finish it and press Return after the text. Returns true if handled.
+    func hotkeyReturn() -> Bool
     /// Live typing editor is open: keys belong to the editor (only fn and Esc keep their meaning).
     var isLiveEditing: Bool { get }
 }
@@ -87,6 +89,9 @@ enum HotkeyError: LocalizedError {
 /// Global listener for the Globe/fn key (toggle or push-to-talk) and ESC (cancel).
 final class HotkeyMonitor {
     private static let escapeKeyCode: Int64 = 53
+    private static let stateFlags: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand, .maskSecondaryFn, .maskAlphaShift]
+    /// Return and the keypad Enter.
+    private static let returnKeyCodes: Set<Int64> = [36, 76]
     private static let controlKeyCodes: Set<Int64> = [59, 62]
     /// Shift, Control, Option, Command (left/right) and Caps Lock.
     private static let modifierKeyCodes: Set<Int64> = [56, 60, 59, 62, 58, 61, 54, 55, 57]
@@ -248,6 +253,17 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
+            } else if Self.returnKeyCodes.contains(keyCode), !recentlyStartedByFn, fnDownAt == nil || pushToTalkActive,
+                      // Only a bare Return; the dictation key held for push-to-talk does not count.
+                      event.flags.intersection(Self.stateFlags).subtracting(pushToTalkActive ? triggerKey.flag : []).isEmpty {
+                var handled = false
+                MainActor.assumeIsolated { handled = delegate?.hotkeyReturn() ?? false }
+                if handled {
+                    cancelHold()
+                    pushToTalkActive = false
+                    comboUsed = true
+                    return nil
+                }
             } else if live {
                 // Letters belong to the editor; Control + letter picks a prompt, Control + space plain text.
                 if event.flags.contains(.maskControl), !event.flags.contains(.maskCommand),
@@ -278,6 +294,16 @@ final class HotkeyMonitor {
         defer { unicodeCode = "" }
         guard let value = UInt32(unicodeCode, radix: 16), value >= 0x20, let scalar = Unicode.Scalar(value) else { return }
         Self.type(Character(scalar))
+    }
+
+    /// Presses Return in the frontmost app (after a dictation finished with Return).
+    static func pressReturn() {
+        for keyDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: keyDown) else { continue }
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
+            event.post(tap: .cgSessionEventTap)
+        }
     }
 
     /// Sends ⌃⌘Space, the system shortcut for Emoji & Symbols, to the frontmost app.

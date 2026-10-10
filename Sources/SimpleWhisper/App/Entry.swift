@@ -204,13 +204,18 @@ enum DebugCLI {
                 }
                 if let tail = segmenter.finish(total: samples.count) { segments.append(tail) }
                 var joined = ""
+                var spokenEnding = false
                 for segment in segments {
                     let t0 = Date()
                     let result = try await FilteredTranscription.run(engine, samples: Array(samples[segment]), language: languageMode, vocabulary: vocabulary,
                                                                      filterSilence: silenceFilter, filterHallucinations: hallucinationFilter)
                     var text = VocabularyPostProcessor.apply(result?.text ?? "", terms: store.vocabulary)
-                    text = MacroExpander.stage2(MacroExpander.stage1(text, macros: macros, clipboard: clipboard).text, macros: macros, clipboard: clipboard)
-                    joined += LiveEditorController.fit(text, before: joined, after: "")
+                    let expanded = MacroExpander.stage1(text, macros: macros, clipboard: clipboard).text
+                    text = MacroExpander.stage2(expanded, macros: macros, clipboard: clipboard, leadingPunctuation: true)
+                    let tail = LiveEditorController.replacedTail(of: joined, by: text, keepFullStop: spokenEnding, language: result?.detectedLanguage)
+                    joined.removeLast(tail.drop)
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spokenEnding = expanded.trimmingCharacters(in: .whitespaces).hasSuffix("⟧") }
+                    joined += (tail.comma ? "," : "") + LiveEditorController.fit(tail.continues ? LiveEditorController.lowercasedFirst(text) : text, before: joined, after: "")
                     print(String(format: "  [chunk] %5.1f–%5.1f s (%.1f s) in %.1f s: %@", Double(segment.lowerBound) / 16_000, Double(segment.upperBound) / 16_000, Double(segment.count) / 16_000, Date().timeIntervalSince(t0), text))
                 }
                 print("Live:      \(joined)")

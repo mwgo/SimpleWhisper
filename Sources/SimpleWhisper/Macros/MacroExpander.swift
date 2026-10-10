@@ -48,7 +48,8 @@ enum MacroExpander {
     }
 
     /// Replaces placeholders with the actual content, applying spacing/capitalisation rules for punctuation.
-    static func stage2(_ text: String, macros: [VoiceMacro], clipboard: String?) -> String {
+    /// `leadingPunctuation` keeps a mark at the very start (a Live typing chunk, joined to the text before it later).
+    static func stage2(_ text: String, macros: [VoiceMacro], clipboard: String?, leadingPunctuation: Bool = false) -> String {
         // Tidy the dictated text first so inserted content (e.g. indented code) is left untouched.
         var output = tidy(text)
         let byID = Dictionary(uniqueKeysWithValues: macros.map { ($0.id.uuidString.uppercased(), $0) })
@@ -71,7 +72,7 @@ enum MacroExpander {
             let joined: String
             switch macro.action {
             case .punctuation:
-                joined = applyPunctuation(macro.text, before: before, after: after, quoteOpen: &quoteOpen)
+                joined = applyPunctuation(macro.text, before: before, after: after, quoteOpen: &quoteOpen, leading: leadingPunctuation)
             case .insertClipboard:
                 joined = join(before: before, content: formatClipboard(clipboard ?? ""), after: after)
             case .newLine:
@@ -92,7 +93,7 @@ enum MacroExpander {
     private static let sentenceEnders: Set<String> = [".", "?", "!"]
     private static let clauseMarks: Set<String> = [",", ";", ":"]
 
-    private static func applyPunctuation(_ symbol: String, before rawBefore: String, after rawAfter: String, quoteOpen: inout Bool) -> String {
+    private static func applyPunctuation(_ symbol: String, before rawBefore: String, after rawAfter: String, quoteOpen: inout Bool, leading: Bool) -> String {
         var before = trimTrailingSpaces(rawBefore)
         var after = trimLeadingSpaces(rawAfter)
 
@@ -104,7 +105,7 @@ enum MacroExpander {
             // Replace a mark the model already put there instead of doubling it.
             while let last = before.last, ",.;:!?".contains(last) { before.removeLast() }
             before = trimTrailingSpaces(before)
-            if before.isEmpty { return after }   // nothing to punctuate yet
+            if before.isEmpty && !leading { return after }   // nothing to punctuate yet
             var rest = after
             if let next = rest.first, ",.;:!?".contains(next) {
                 // Two marks collide (e.g. the AI dropped the word between them): keep the stronger one.

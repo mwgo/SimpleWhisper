@@ -88,6 +88,7 @@ struct GeneralSettingsView: View {
                 }
                 HotkeyLegend(key: settings.hotkeyKey, doublePress: settings.fnDoublePress, commandMode: settings.commandModeEnabled, liveTyping: settings.liveTypingEnabled)
                 Stepper("Hold threshold: \(settings.holdThresholdMs) ms", value: Binding(get: { settings.holdThresholdMs }, set: { settings.holdThresholdMs = $0; controller.applyHotkeySettings() }), in: 200...1000, step: 50)
+                Toggle("Return finishes the dictation, inserts the text and presses Return", isOn: Binding(get: { settings.returnFinishesDictation }, set: { settings.returnFinishesDictation = $0 }))
                 Toggle("Require a double press", isOn: Binding(get: { settings.fnDoublePress }, set: { settings.fnDoublePress = $0; controller.applyHotkeySettings() }))
                 if settings.fnDoublePress {
                     Stepper("Double-press window: \(settings.doublePressWindowMs) ms", value: Binding(get: { settings.doublePressWindowMs }, set: { settings.doublePressWindowMs = $0; controller.applyHotkeySettings() }), in: 200...800, step: 50)

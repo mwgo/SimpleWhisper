@@ -8,7 +8,7 @@ struct PauseSegmenter {
     /// A frame is silence when it is within this many dB of the noise floor.
     var silenceMarginDB: Double = 8
     var minSpeech: Double = 0.3
-    var minPause: Double = 1.0
+    var minPause: Double = 2.0
     /// Without a pause, cut anyway after this long (at the quietest recent moment); stays under Whisper's 30 s window.
     var maxSegment: Double = 25
     /// Louder bursts shorter than this (wind, a knock, echo) do not end a pause.

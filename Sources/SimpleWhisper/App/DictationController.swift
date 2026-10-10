@@ -58,7 +58,7 @@ final class DictationController: HotkeyMonitorDelegate {
     private var livePreviewBusy = false
     private var livePreviewLoop: Task<Void, Never>?
     /// Latest preview per placeholder: a final result never replaces a longer preview.
-    private var livePreviews: [String: String] = [:]
+    private var livePreviews: [String: (raw: String, text: String)] = [:]
     /// Live typing goes through the SimpleWhisper input method: the dictation is marked text in the app.
     private let inputSource = InputSourceBridge()
     private var imeSession = false
@@ -66,6 +66,8 @@ final class DictationController: HotkeyMonitorDelegate {
     private var imeCommits = 0
     /// Finished utterances already inserted in the app during this dictation.
     private var imeDelivered = ""
+    /// The dictation was finished with Return: press it in the app once the text is in.
+    private var returnAfterDelivery = false
     private var contextRefresh: Task<Void, Never>?
 
     init() {
@@ -248,6 +250,29 @@ final class DictationController: HotkeyMonitorDelegate {
         return true
     }
 
+    func hotkeyReturn() -> Bool {
+        guard settings.returnFinishesDictation else { return false }
+        switch state.phase {
+        case .idle:
+            return false
+        case .recording:
+            returnAfterDelivery = true
+            stopAndTranscribe()
+        case .transcribing, .processing:
+            returnAfterDelivery = true
+        }
+        return true
+    }
+
+    /// Presses Return in the app after the text went in; nothing when it was shown in a window instead.
+    private func pressReturnIfRequested(inserted: Bool) async {
+        guard returnAfterDelivery else { return }
+        returnAfterDelivery = false
+        guard inserted else { return }
+        try? await Task.sleep(for: .milliseconds(150))
+        HotkeyMonitor.pressReturn()
+    }
+
     func hotkeyCancelSilently() {
         guard state.phase == .recording else { return }
         _ = recorder.stop()
@@ -276,6 +301,7 @@ final class DictationController: HotkeyMonitorDelegate {
         paster.rememberTarget()
         pasteTargetAvailable = PasteTargetProbe.canPasteIntoFocusedElement()
         liveSession = settings.liveTypingEnabled
+        returnAfterDelivery = false
         imeSession = false
         imeDelivered = ""
         let throughInputMethod = liveSession && InputSourceBridge.status == .selected
@@ -438,7 +464,9 @@ final class DictationController: HotkeyMonitorDelegate {
     /// (rendered as Markdown when it looks like Markdown). The clipboard is left alone.
     /// Hides the HUD (or flashes `notice`) and pastes; when there is nothing to paste into, the HUD
     /// becomes the result card instead, so it must not be hidden first.
-    private func deliver(_ text: String, canPaste: Bool? = nil, animatedHide: Bool = true, notice: String? = nil) async {
+    /// Returns true when the text was pasted into the app (false: shown in a window).
+    @discardableResult
+    private func deliver(_ text: String, canPaste: Bool? = nil, animatedHide: Bool = true, notice: String? = nil) async -> Bool {
         if canPaste ?? PasteTargetProbe.canPasteIntoFocusedElement() {
             if let notice {
                 hud.flash(notice, duration: .seconds(2))
@@ -446,6 +474,7 @@ final class DictationController: HotkeyMonitorDelegate {
                 hud.hide(animated: animatedHide)
             }
             await paster.paste(text, keepInClipboard: settings.keepTextInClipboard)
+            return true
         } else if MarkdownRenderer.looksLikeMarkdown(text) {
             DebugLog.write("No editable field focused; showing Markdown result window")
             hud.hide()
@@ -454,6 +483,7 @@ final class DictationController: HotkeyMonitorDelegate {
             DebugLog.write("No editable field focused; showing the result card")
             hud.showResult(text, editor: liveEditor)
         }
+        return false
     }
 
     private func recordHistory(_ entry: HistoryEntry) {
@@ -483,6 +513,7 @@ final class DictationController: HotkeyMonitorDelegate {
 
     func cancel() {
         DebugLog.write("cancel() called in phase \(state.phase)")
+        returnAfterDelivery = false
         switch state.phase {
         case .idle:
             return
@@ -604,24 +635,26 @@ final class DictationController: HotkeyMonitorDelegate {
             let transcription = try await transcribe(engine, samples, vocabulary: vocabulary)
             guard generation == liveGeneration else { return }
             if transcription == nil && !final { return }
-            var text = VocabularyPostProcessor.apply(transcription?.text ?? "", terms: store.vocabulary)
-            text = MacroExpander.stage1(text, macros: macros, clipboard: capturedClipboard).text
-            text = MacroExpander.stage2(text, macros: macros, clipboard: capturedClipboard)
+            // Lengths are compared before spoken punctuation turns "przecinek" into ",".
+            let raw = VocabularyPostProcessor.apply(transcription?.text ?? "", terms: store.vocabulary)
+            var text = MacroExpander.stage1(raw, macros: macros, clipboard: capturedClipboard).text
+            let spokenEnding = text.trimmingCharacters(in: .whitespaces).hasSuffix("⟧")
+            text = MacroExpander.stage2(text, macros: macros, clipboard: capturedClipboard, leadingPunctuation: true)
             guard final else {
                 // Ignore a preview that suddenly lost most of its text (a decoder hiccup).
-                if text.count >= Int(Double(livePreviews[id]?.count ?? 0) * 0.7) {
-                    livePreviews[id] = text
+                if raw.count >= Int(Double(livePreviews[id]?.raw.count ?? 0) * 0.7) {
+                    livePreviews[id] = (raw, text)
                     liveEditor.preview(id, with: text)
                 }
                 return
             }
-            if let preview = livePreviews.removeValue(forKey: id), Double(text.count) < Double(preview.count) * 0.6 {
-                DebugLog.write("Live chunk final (\(text.count) chars) shorter than its preview (\(preview.count)); keeping the preview")
-                text = preview
+            if let preview = livePreviews.removeValue(forKey: id), Double(raw.count) < Double(preview.raw.count) * 0.6 {
+                DebugLog.write("Live chunk final (\(raw.count) chars) shorter than its preview (\(preview.raw.count)); keeping the preview")
+                text = preview.text
             }
             liveLanguage = transcription?.detectedLanguage ?? liveLanguage
             DebugLog.write("Live chunk \(String(format: "%.1f", Double(samples.count) / 16_000)) s → \(text.count) chars")
-            liveEditor.resolve(id, with: text)
+            liveEditor.resolve(id, with: text, spokenEnding: spokenEnding, language: transcription?.detectedLanguage)
             commitFinishedText()
         } catch {
             guard generation == liveGeneration, final else { return }
@@ -674,6 +707,7 @@ final class DictationController: HotkeyMonitorDelegate {
             } else {
                 finishDelivered(delivered.trimmingCharacters(in: .whitespacesAndNewlines))
             }
+            await pressReturnIfRequested(inserted: true)
             return
         }
         let commits = imeCommits
@@ -692,18 +726,21 @@ final class DictationController: HotkeyMonitorDelegate {
         state.lastLanguage = liveLanguage
         state.phase = .idle
         recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: whole, language: liveLanguage))
+        var inserted = true
         if throughInputMethod {
             hud.hide(animated: false)
             if imeCommits != commits {
                 DebugLog.write("Marked text was committed in the app while the prompt ran; not inserting the result")
+                inserted = false
             } else if !(await inputSource.insert(leading + text + trailing)) {
                 DebugLog.write("Input method did not confirm the insert; delivering the usual way")
-                await deliver(text, animatedHide: false)
+                inserted = await deliver(text, animatedHide: false)
             }
         } else {
-            await deliver(text, canPaste: pasteTargetAvailable, animatedHide: false)
+            inserted = await deliver(text, canPaste: pasteTargetAvailable, animatedHide: false)
         }
         endActivity()
+        await pressReturnIfRequested(inserted: inserted)
     }
 
     /// Everything was already inserted in the app utterance by utterance.
@@ -822,8 +859,9 @@ final class DictationController: HotkeyMonitorDelegate {
             state.phase = .idle
             recordHistory(HistoryEntry(date: Date(), kind: .dictation, text: text, language: transcription.detectedLanguage))
 
-            await deliver(text, notice: expansion.clipboardWasEmpty ? "Clipboard was empty" : nil)
+            let inserted = await deliver(text, notice: expansion.clipboardWasEmpty ? "Clipboard was empty" : nil)
             endActivity()
+            await pressReturnIfRequested(inserted: inserted)
         } catch is CancellationError {
             if state.phase != .idle {
                 DebugLog.write("Pipeline cancelled unexpectedly in phase \(state.phase)")
@@ -833,6 +871,7 @@ final class DictationController: HotkeyMonitorDelegate {
             }
         } catch let error as DictationError where error == .noSpeech || error == .tooShort {
             dismissQuietly(reason: error)
+            await pressReturnIfRequested(inserted: true)
         } catch {
             DebugLog.write("Pipeline error: \(error)")
             showError(error.localizedDescription)

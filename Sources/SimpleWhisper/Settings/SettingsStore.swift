@@ -22,6 +22,10 @@ final class AppSettings {
     var commandModeEnabled: Bool {
         didSet { defaults.set(commandModeEnabled, forKey: "commandModeEnabled") }
     }
+    /// Return during a dictation finishes it, inserts the text and then presses Return in the app.
+    var returnFinishesDictation: Bool {
+        didSet { defaults.set(returnFinishesDictation, forKey: "returnFinishesDictation") }
+    }
     /// Right Command + a c e l n o s x z types ą ć ę ł ń ó ś ź ż (with Shift: capitals).
     var polishRightCommand: Bool {
         didSet { defaults.set(polishRightCommand, forKey: "polishRightCommand") }
@@ -148,6 +152,7 @@ final class AppSettings {
         keepTextInClipboard = defaults.object(forKey: "keepTextInClipboard") as? Bool ?? false
         spokenPunctuationEnabled = defaults.object(forKey: "spokenPunctuationEnabled") as? Bool ?? true
         commandModeEnabled = defaults.object(forKey: "commandModeEnabled") as? Bool ?? false
+        returnFinishesDictation = defaults.object(forKey: "returnFinishesDictation") as? Bool ?? true
         polishRightCommand = defaults.object(forKey: "polishRightCommand") as? Bool ?? false
         historyEnabled = defaults.object(forKey: "historyEnabled") as? Bool ?? false
         hudPlacement = HUDPlacement(rawValue: defaults.string(forKey: "hudPlacement") ?? "") ?? .nearCaret

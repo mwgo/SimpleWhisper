@@ -154,7 +154,12 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     /// into the context and returns it.
     func takeFinished() -> String {
         let storage = textView.string as NSString
-        let end = anchors.values.map(\.location).min() ?? storage.length - suffixLength
+        var end = anchors.values.map(\.location).min() ?? storage.length - suffixLength
+        // The closing mark stays: the next chunk may replace it (spoken "przecinek" after a pause).
+        while end > contextLength, let scalar = Unicode.Scalar(storage.character(at: end - 1)),
+              Self.closingMarks.contains(Character(scalar)) || CharacterSet.whitespacesAndNewlines.contains(scalar) {
+            end -= 1
+        }
         guard end > contextLength else { return "" }
         let finished = storage.substring(with: NSRange(location: contextLength, length: end - contextLength))
         contextLength = end
@@ -182,11 +187,55 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     }
 
     /// Writes the final transcription at the chunk's spot, fixing spacing and capitalisation.
-    func resolve(_ id: String, with chunk: String) {
-        guard let range = anchors.removeValue(forKey: id) else { return }
-        let fitted = fitted(chunk, replacing: range)
+    /// `spokenEnding`: the chunk ends with a spoken mark ("kropka"), which a later chunk must not remove.
+    func resolve(_ id: String, with chunk: String, spokenEnding: Bool = false, language: String? = nil) {
+        guard var range = anchors.removeValue(forKey: id) else { return }
+        let storage = textView.string as NSString
+        let start = min(contextLength, range.location)
+        let own = storage.substring(with: NSRange(location: start, length: range.location - start))
+        let tail = Self.replacedTail(of: own, by: chunk, keepFullStop: lastEndingSpoken, language: language)
+        range = NSRange(location: range.location - tail.drop, length: range.length + tail.drop)
+        if !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lastEndingSpoken = spokenEnding }
+        let fitted = (tail.comma ? "," : "") + fitted(tail.continues ? Self.lowercasedFirst(chunk) : chunk, replacing: range)
         guard range.length > 0 || !fitted.isEmpty else { return }
         replace(range, with: NSAttributedString(string: fitted, attributes: normalAttributes), anchor: nil)
+    }
+
+    nonisolated private static let closingMarks: Set<Character> = [",", ".", ";", ":", "!", "?"]
+    /// Words that continue a sentence, so a full stop before them came from a pause, not from the speaker:
+    /// (taking a comma before them, without one) per language.
+    nonisolated private static let continuations: [String: (comma: Set<String>, plain: Set<String>)] = [
+        "pl": (["że", "ale", "a", "bo", "ponieważ", "więc", "który", "która", "które", "których", "którego", "której",
+                "gdy", "kiedy", "jeśli", "jeżeli", "żeby", "aby", "niż", "czyli"],
+               ["i", "oraz", "lub", "albo", "czy", "tylko"]),
+        "en": (["but", "which", "because"], ["and", "or", "that", "than"]),
+    ]
+    /// Also English words ("I", "A"): never treated as continuations when the chunk's language is unknown.
+    nonisolated private static let ambiguous: Set<String> = ["i", "a"]
+
+    nonisolated static func lowercasedFirst(_ chunk: String) -> String {
+        let text = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.prefix(1).lowercased() + text.dropFirst()
+    }
+    private var lastEndingSpoken = false
+
+    /// How many trailing UTF-16 units of `before` the chunk replaces: the closing mark of the previous chunk
+    /// when the chunk starts with punctuation, or a full stop the model put before a word that continues the
+    /// sentence (`continues`; `comma`: that word takes a comma instead). `language`: the chunk's language code.
+    nonisolated static func replacedTail(of before: String, by chunk: String, keepFullStop: Bool = false,
+                                         language: String? = nil) -> (drop: Int, comma: Bool, continues: Bool) {
+        let text = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = text.first else { return (0, false, false) }
+        let tail = before.reversed().prefix { $0.isWhitespace || closingMarks.contains($0) }
+        guard tail.contains(where: { closingMarks.contains($0) }) else { return (0, false, false) }
+        if closingMarks.contains(first) { return (String(tail).utf16.count, false, false) }
+        let word = text.prefix { $0.isLetter }.lowercased()
+        let marks = tail.filter { closingMarks.contains($0) }
+        guard !keepFullStop, marks == ["."], language != nil || !ambiguous.contains(word) else { return (0, false, false) }
+        let sets = language.flatMap { continuations[$0] }.map { [$0] } ?? (language == nil ? Array(continuations.values) : [])
+        if sets.contains(where: { $0.comma.contains(word) }) { return (String(tail).utf16.count, true, true) }
+        if sets.contains(where: { $0.plain.contains(word) }) { return (String(tail).utf16.count, false, true) }
+        return (0, false, false)
     }
 
     func drop(_ id: String) { resolve(id, with: "") }
