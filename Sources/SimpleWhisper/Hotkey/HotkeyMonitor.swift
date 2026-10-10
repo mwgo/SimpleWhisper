@@ -99,13 +99,23 @@ final class HotkeyMonitor {
     /// The key that starts dictation (fn by default; left/right Command or Option).
     var triggerKey: HotkeyKey = .fn
 
-    /// Right Command + letter types a Polish letter (unless right Command is the dictation key).
+    /// Right Command + letter types a Polish letter, other letters as they are; right Command + hex code types
+    /// that Unicode character on release; right Command + Space opens Emoji & Symbols (unless right Command is the dictation key).
     var polishLetters = false
     /// Key codes (QWERTY positions) of a c e l n o s x z and their Polish letters.
     private static let polishLetterKeys: [Int64: Character] = [0: "ą", 8: "ć", 14: "ę", 37: "ł", 45: "ń", 31: "ó", 1: "ś", 7: "ź", 6: "ż"]
     private static let rightCommandDeviceFlag: UInt64 = 0x10
     private static let rightCommandKeyCode: Int64 = 54
+    private static let spaceKeyCode: Int64 = 49
     private var rightCommandDown = false
+    /// Hex digits typed while right Command is held; the character with that code is typed on release.
+    private var unicodeCode = ""
+    /// Key codes of 0–9 (main row and keypad) and a–f.
+    private static let hexDigitKeys: [Int64: Character] = [
+        29: "0", 18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9",
+        82: "0", 83: "1", 84: "2", 85: "3", 86: "4", 87: "5", 88: "6", 89: "7", 91: "8", 92: "9",
+        0: "a", 11: "b", 8: "c", 2: "d", 14: "e", 3: "f",
+    ]
     /// Marks the letters this monitor types itself, so it lets them through untouched.
     private static let syntheticMarker: Int64 = 0x5357_504c
 
@@ -173,14 +183,26 @@ final class HotkeyMonitor {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         if type == .flagsChanged, keyCode == Self.rightCommandKeyCode {
             rightCommandDown = event.flags.contains(.maskCommand)
+            if !rightCommandDown { typeUnicodeCode() }
         }
         if type == .keyDown, polishLetters, triggerKey != .rightCommand, event.flags.contains(.maskCommand),
            rightCommandDown || event.flags.rawValue & Self.rightCommandDeviceFlag != 0,
-           !event.flags.contains(.maskControl), !event.flags.contains(.maskAlternate),
-           let letter = Self.polishLetterKeys[keyCode] {
-            let capital = event.flags.contains(.maskShift) != event.flags.contains(.maskAlphaShift)
-            Self.type(capital ? Character(letter.uppercased()) : letter)
-            return nil
+           !event.flags.contains(.maskControl), !event.flags.contains(.maskAlternate) {
+            if keyCode == Self.spaceKeyCode {
+                unicodeCode = ""
+                Self.showCharacterViewer()
+                return nil
+            }
+            // A code starts with a digit (0e9, 2014); after that a–f are hex digits too.
+            if let digit = Self.hexDigitKeys[keyCode], digit.isNumber || !unicodeCode.isEmpty {
+                if unicodeCode.count < 6 { unicodeCode.append(digit) }
+                return nil
+            }
+            if let letter = Self.polishLetterKeys[keyCode] ?? Self.plainLetter(of: event) {
+                let capital = event.flags.contains(.maskShift) != event.flags.contains(.maskAlphaShift)
+                Self.type(capital ? Character(letter.uppercased()) : letter)
+                return nil
+            }
         }
         var live = false
         MainActor.assumeIsolated { live = delegate?.isLiveEditing ?? false }
@@ -250,6 +272,29 @@ final class HotkeyMonitor {
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func typeUnicodeCode() {
+        defer { unicodeCode = "" }
+        guard let value = UInt32(unicodeCode, radix: 16), value >= 0x20, let scalar = Unicode.Scalar(value) else { return }
+        Self.type(Character(scalar))
+    }
+
+    /// Sends ⌃⌘Space, the system shortcut for Emoji & Symbols, to the frontmost app.
+    private static func showCharacterViewer() {
+        for keyDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(spaceKeyCode), keyDown: keyDown) else { continue }
+            event.flags = [.maskControl, .maskCommand]
+            event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
+            event.post(tap: .cgSessionEventTap)
+        }
+    }
+
+    /// The letter the key types without modifiers, nil for digits, punctuation and other keys.
+    private static func plainLetter(of event: CGEvent) -> Character? {
+        guard let characters = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased(),
+              characters.count == 1, let letter = characters.first, letter.isLetter else { return nil }
+        return letter
     }
 
     /// Types `letter` into the frontmost app as if from the keyboard, without modifiers.

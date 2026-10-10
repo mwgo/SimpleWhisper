@@ -94,6 +94,8 @@ struct GeneralSettingsView: View {
                 }
                 Toggle("Right ⌘ + a c e l n o s x z types ą ć ę ł ń ó ś ź ż", isOn: Binding(get: { settings.polishRightCommand }, set: { settings.polishRightCommand = $0; controller.applyHotkeySettings() }))
                     .disabled(settings.hotkeyKey == .rightCommand)
+                Text("Other letters are typed as they are, so letter shortcuts need the left ⌘. Hold right ⌘, type a Unicode code in hex starting with a digit (2014, 0e9, 1f600) and release ⌘ to type that character. Right ⌘ + Space opens Emoji & Symbols.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if settings.hotkeyKey == .fn {
                     Text("System Settings › Keyboard › “Press 🌐 key to” must be set to “Do Nothing”.")
                         .font(.caption).foregroundStyle(.secondary)
