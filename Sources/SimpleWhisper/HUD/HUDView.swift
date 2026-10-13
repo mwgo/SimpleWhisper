@@ -104,7 +104,6 @@ struct HUDView: View {
                         .onTapGesture(perform: onTap)
                     Spacer(minLength: 8)
                     if model.showsEditButtons && model.stage == .recording { editButtons }
-                    cardButton(nil, systemImage: "doc.on.clipboard", help: "Paste the clipboard at the caret") { editor.pasteClipboard() }
                 }
             }
             .padding(.horizontal, 14)
@@ -133,8 +132,13 @@ struct HUDView: View {
     private var editButtons: some View {
         HStack(spacing: 4) {
             editButton(systemImage: "delete.backward", help: "Delete the last word") { onEdit(.deleteWord) }
-            editButton(text: ".", help: "Full stop") { onEdit(.mark(".")) }
-            editButton(text: ",", help: "Comma") { onEdit(.mark(",")) }
+            editButton(systemImage: "doc.on.clipboard", help: "Paste the clipboard's text") {
+                if let text = NSPasteboard.general.string(forType: .string), !text.isEmpty {
+                    onEdit(.paste(text))
+                } else {
+                    NSSound.beep()
+                }
+            }
             editButton(systemImage: "return", help: "New line") { onEdit(.newLine) }
         }
     }

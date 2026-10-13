@@ -623,6 +623,13 @@ final class DictationController: HotkeyMonitorDelegate {
         return true
     }
 
+    func hotkeyPaste() -> Bool {
+        guard imeSession, liveSession, state.phase == .recording,
+              let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return false }
+        liveEdit(.paste(text))
+        return true
+    }
+
     /// ⌘Backspace: the marked dictation and the words being said now are thrown away.
     private func discardLiveDictation() {
         _ = recorder.takeSegments()
@@ -667,10 +674,11 @@ final class DictationController: HotkeyMonitorDelegate {
         liveEditor.apply(plan, includingContext: true)
         imeDelivered = String(imeDelivered.dropLast(min(plan.remove, imeDelivered.count))) + plan.insert
         HotkeyMonitor.pressBackspace(count: plan.remove)
-        switch plan.insert {
-        case "": break
-        case "\n": HotkeyMonitor.pressReturn(flags: .maskShift)
-        default: HotkeyMonitor.type(text: plan.insert)
+        switch edit {
+        case .deleteWord: break
+        case .newLine: HotkeyMonitor.pressReturn(flags: .maskShift)
+        // Plain text only, whatever else the clipboard holds; the input method inserts it in one piece.
+        case .paste: inputSource.commit(plan.insert, keepingMarked: "")
         }
         // The next edit in the queue reads the app's text: let the app take these keys first.
         try? await Task.sleep(for: .milliseconds(150))

@@ -232,13 +232,13 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     /// A change made with the buttons on the HUD while dictating.
     enum Edit: Sendable {
         case deleteWord
-        case mark(String)
         case newLine
+        case paste(String)
     }
 
     /// What `edit` does at the end of `before`: how many characters it removes and what it inserts.
     /// Delete takes the last word with its punctuation and the spaces around it (or a single line break);
-    /// a mark replaces the marks and spaces at the end.
+    /// pasted text gets a space before it after a word.
     nonisolated static func plan(_ edit: Edit, before: String) -> (remove: Int, insert: String) {
         let chars = Array(before)
         var start = chars.count
@@ -250,9 +250,10 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
             while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
             while start > 0, isSpace(chars[start - 1]) { start -= 1 }
             return (chars.count - start, "")
-        case .mark(let mark):
-            while start > 0, isSpace(chars[start - 1]) || closingMarks.contains(chars[start - 1]) { start -= 1 }
-            return (chars.count - start, mark)
+        case .paste(let text):
+            let spaced = chars.last.map { !$0.isWhitespace && $0 != "(" } ?? false
+                && text.first.map { !$0.isWhitespace && !closingMarks.contains($0) && $0 != ")" } ?? false
+            return (0, spaced ? " " + text : text)
         case .newLine:
             while start > 0, isSpace(chars[start - 1]) { start -= 1 }
             return (chars.count - start, "\n")
@@ -447,24 +448,6 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         if !programmaticChange { onUserEdit() }
     }
 
-    /// Inserts the clipboard text at the caret (replacing a selection), like ⌘V.
-    func pasteClipboard() {
-        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { NSSound.beep(); return }
-        focus()
-        let range = textView.selectedRange()
-        let storage = textView.string as NSString
-        var inserted = text
-        if let last = storage.substring(to: range.location).last, !last.isWhitespace, last != "(",
-           let first = text.first, !first.isWhitespace, !",.;:!?)".contains(first) {
-            inserted = " " + inserted
-        }
-        if let next = storage.substring(from: NSMaxRange(range)).first, !next.isWhitespace, !",.;:!?)".contains(next),
-           let end = text.last, !end.isWhitespace {
-            inserted += " "
-        }
-        textView.typingAttributes = normalAttributes
-        textView.insertText(inserted, replacementRange: range)
-    }
 
     /// Undoes a scroll made while the frame was still smaller than the text, once everything fits.
     func scrollToTopIfFits() {

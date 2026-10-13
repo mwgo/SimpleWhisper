@@ -25,6 +25,8 @@ protocol HotkeyMonitorDelegate: AnyObject {
     /// Backspace while the dictation is still marked text in the app, or right after such a Backspace
     /// (`continuing`): delete the last word (⌘: all of the marked text). Returns true if handled.
     func hotkeyBackspace(flags: CGEventFlags, continuing: Bool) -> Bool
+    /// ⌘V while the dictation is marked text in the app: paste the clipboard's text after it. Returns true if handled.
+    func hotkeyPaste() -> Bool
     /// Live typing editor is open: keys belong to the editor (only fn and Esc keep their meaning).
     var isLiveEditing: Bool { get }
 }
@@ -97,6 +99,7 @@ final class HotkeyMonitor {
     private static let escapeKeyCode: Int64 = 53
     private static let stateFlags: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand, .maskSecondaryFn, .maskAlphaShift]
     private static let backspaceKeyCode: Int64 = 51
+    private static let vKeyCode: Int64 = 9
     /// The last key was a Backspace that deleted a dictated word.
     private var backspaceRun = false
     /// Return and the keypad Enter.
@@ -285,6 +288,9 @@ final class HotkeyMonitor {
                 cancelHold()
                 comboUsed = true
                 return nil
+            } else if keyCode == Self.vKeyCode, event.flags.intersection(Self.stateFlags).subtracting(.maskAlphaShift) == .maskCommand,
+                      MainActor.assumeIsolated({ delegate?.hotkeyPaste() == true }) {
+                return nil
             } else if live {
                 // Letters belong to the editor; Control + letter picks a prompt, Control + space plain text.
                 if event.flags.contains(.maskControl), !event.flags.contains(.maskCommand),
@@ -327,11 +333,6 @@ final class HotkeyMonitor {
     /// Presses Backspace `count` times in the frontmost app.
     static func pressBackspace(count: Int) {
         for _ in 0..<count { press(51) }
-    }
-
-    /// Types `text` into the frontmost app.
-    static func type(text: String) {
-        text.forEach { type($0) }
     }
 
     private static func press(_ key: CGKeyCode, flags: CGEventFlags = []) {
