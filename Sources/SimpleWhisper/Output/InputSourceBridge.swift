@@ -42,9 +42,15 @@ final class InputSourceBridge {
         guard Self.status == .selected, let bundle = app?.bundleIdentifier else { return nil }
         target = bundle
         guard let reply = await send("ping"), reply["event"] == "pong" else { return nil }
-        let before = reply["before"] ?? "", after = reply["after"] ?? ""
+        var before = reply["before"] ?? "", after = reply["after"] ?? ""
+        let around = AXFocus.textAroundCaret()
         // Some apps (JetBrains IDEs) do not hand text to input methods; accessibility often does.
-        if before.isEmpty, after.isEmpty, let around = AXFocus.textAroundCaret() { return around }
+        if before.isEmpty, after.isEmpty, let around { return around }
+        // Others (Teams) hand over text of an earlier message: nothing there per accessibility means nothing there.
+        if let around {
+            if around.before.isEmpty { before = "" }
+            if around.after.isEmpty { after = "" }
+        }
         return (before, after)
     }
 
