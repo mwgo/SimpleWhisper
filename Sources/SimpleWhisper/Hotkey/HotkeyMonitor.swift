@@ -22,6 +22,9 @@ protocol HotkeyMonitorDelegate: AnyObject {
     /// Return with modifiers (Shift+Return…) while the dictation is marked text in the app: commit it first,
     /// then press the key again. Returns true if handled.
     func hotkeyReturnInInputMethod(flags: CGEventFlags) -> Bool
+    /// Backspace while the dictation is still marked text in the app, or right after such a Backspace
+    /// (`continuing`): delete the last word (⌘: all of the marked text). Returns true if handled.
+    func hotkeyBackspace(flags: CGEventFlags, continuing: Bool) -> Bool
     /// Live typing editor is open: keys belong to the editor (only fn and Esc keep their meaning).
     var isLiveEditing: Bool { get }
 }
@@ -93,6 +96,9 @@ enum HotkeyError: LocalizedError {
 final class HotkeyMonitor {
     private static let escapeKeyCode: Int64 = 53
     private static let stateFlags: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand, .maskSecondaryFn, .maskAlphaShift]
+    private static let backspaceKeyCode: Int64 = 51
+    /// The last key was a Backspace that deleted a dictated word.
+    private var backspaceRun = false
     /// Return and the keypad Enter.
     private static let returnKeyCodes: Set<Int64> = [36, 76]
     private static let controlKeyCodes: Set<Int64> = [59, 62]
@@ -189,6 +195,7 @@ final class HotkeyMonitor {
             return Unmanaged.passUnretained(event)
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        if type == .keyDown, keyCode != Self.backspaceKeyCode { backspaceRun = false }
         if type == .flagsChanged, keyCode == Self.rightCommandKeyCode {
             rightCommandDown = event.flags.contains(.maskCommand)
             if !rightCommandDown { typeUnicodeCode() }
@@ -270,6 +277,14 @@ final class HotkeyMonitor {
                     comboUsed = true
                     return nil
                 }
+            } else if keyCode == Self.backspaceKeyCode, fnDownAt == nil || pushToTalkActive,
+                      MainActor.assumeIsolated({ [backspaceRun] in
+                          delegate?.hotkeyBackspace(flags: event.flags.intersection(Self.stateFlags), continuing: backspaceRun) == true
+                      }) {
+                backspaceRun = true
+                cancelHold()
+                comboUsed = true
+                return nil
             } else if live {
                 // Letters belong to the editor; Control + letter picks a prompt, Control + space plain text.
                 if event.flags.contains(.maskControl), !event.flags.contains(.maskCommand),
@@ -293,6 +308,8 @@ final class HotkeyMonitor {
         default:
             break
         }
+        // A Backspace that reached the app ends the run of word deletions.
+        if type == .keyDown, keyCode == Self.backspaceKeyCode { backspaceRun = false }
         return Unmanaged.passUnretained(event)
     }
 
@@ -304,8 +321,22 @@ final class HotkeyMonitor {
 
     /// Presses Return (with `flags`) in the frontmost app.
     static func pressReturn(flags: CGEventFlags = []) {
+        press(36, flags: flags)
+    }
+
+    /// Presses Backspace `count` times in the frontmost app.
+    static func pressBackspace(count: Int) {
+        for _ in 0..<count { press(51) }
+    }
+
+    /// Types `text` into the frontmost app.
+    static func type(text: String) {
+        text.forEach { type($0) }
+    }
+
+    private static func press(_ key: CGKeyCode, flags: CGEventFlags = []) {
         for keyDown in [true, false] {
-            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: keyDown) else { continue }
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: keyDown) else { continue }
             event.flags = flags
             event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
             event.post(tap: .cgSessionEventTap)

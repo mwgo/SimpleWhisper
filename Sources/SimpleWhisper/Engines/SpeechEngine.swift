@@ -96,6 +96,7 @@ enum FilteredTranscription {
         if filterHallucinations {
             transcription.text = await HallucinationFilter.clean(transcription, samples: audio)
         }
+        transcription.text = RepetitionFilter.clean(transcription.text)
         return transcription
     }
 }

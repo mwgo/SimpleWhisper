@@ -26,6 +26,12 @@ final class HUDWindowController: NSObject {
     var selectedPromptID: () -> UUID? = { nil }
     var onSelectPrompt: (UUID?) -> Void = { _ in }
     var onRunCommand: () -> Void = {}
+    var onEdit: (LiveEditorController.Edit) -> Void = { _ in }
+    /// Live typing edit buttons (shown while recording).
+    var showsEditButtons: Bool {
+        get { model.showsEditButtons }
+        set { model.showsEditButtons = newValue }
+    }
 
     private let panel: HUDPanel
     private let hostingView: NSHostingView<HUDView>
@@ -77,7 +83,8 @@ final class HUDWindowController: NSObject {
             onTap: { [weak self] in self?.showPromptMenu() },
             onCommand: { [weak self] in self?.onRunCommand() },
             onCopyResult: { [weak self] in self?.copyResult() },
-            onCloseResult: { [weak self] in self?.hide() }
+            onCloseResult: { [weak self] in self?.hide() },
+            onEdit: { [weak self] edit in self?.onEdit(edit) }
         )
         panel.contentView = hostingView
     }

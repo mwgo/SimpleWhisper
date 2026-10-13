@@ -99,6 +99,7 @@ enum HUDDemo {
         controller.showsText = ProcessInfo.processInfo.environment["SW_HUD_NOTEXT"] == nil
         controller.theme = ProcessInfo.processInfo.environment["SW_HUD_THEME"].flatMap(HUDTheme.init(rawValue:)) ?? .freshGreen
         controller.glass = ProcessInfo.processInfo.environment["SW_HUD_SOLID"] == nil
+        controller.showsEditButtons = ProcessInfo.processInfo.environment["SW_HUD_EDIT"] != nil
         hud = controller
         if ProcessInfo.processInfo.environment["SW_HUD_LIVE"] != nil {
             runLive(controller)
@@ -212,7 +213,10 @@ enum DebugCLI {
                     var text = VocabularyPostProcessor.apply(result?.text ?? "", terms: store.vocabulary)
                     let expanded = MacroExpander.stage1(text, macros: macros, clipboard: clipboard).text
                     text = MacroExpander.stage2(expanded, macros: macros, clipboard: clipboard, leadingPunctuation: true)
-                    let tail = LiveEditorController.replacedTail(of: joined, by: text, keepFullStop: spokenEnding, language: result?.detectedLanguage)
+                    let deduplicated = LiveEditorController.withoutRepeatedStart(text, after: joined)
+                    let repeated = deduplicated != text
+                    text = deduplicated
+                    let tail = LiveEditorController.replacedTail(of: joined, by: text, keepFullStop: spokenEnding, language: result?.detectedLanguage, continues: repeated)
                     joined.removeLast(tail.drop)
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spokenEnding = expanded.trimmingCharacters(in: .whitespaces).hasSuffix("⟧") }
                     joined += (tail.comma ? "," : "") + LiveEditorController.fit(tail.continues ? LiveEditorController.lowercasedFirst(text) : text, before: joined, after: "")

@@ -188,12 +188,14 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
 
     /// Writes the final transcription at the chunk's spot, fixing spacing and capitalisation.
     /// `spokenEnding`: the chunk ends with a spoken mark ("kropka"), which a later chunk must not remove.
-    func resolve(_ id: String, with chunk: String, spokenEnding: Bool = false, language: String? = nil) {
+    func resolve(_ id: String, with spoken: String, spokenEnding: Bool = false, language: String? = nil) {
         guard var range = anchors.removeValue(forKey: id) else { return }
         let storage = textView.string as NSString
+        let chunk = Self.withoutRepeatedStart(spoken, after: storage.substring(to: range.location))
+        let repeated = chunk != spoken
         let start = min(contextLength, range.location)
         let own = storage.substring(with: NSRange(location: start, length: range.location - start))
-        let tail = Self.replacedTail(of: own, by: chunk, keepFullStop: lastEndingSpoken, language: language)
+        let tail = Self.replacedTail(of: own, by: chunk, keepFullStop: lastEndingSpoken, language: language, continues: repeated)
         range = NSRange(location: range.location - tail.drop, length: range.length + tail.drop)
         if !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lastEndingSpoken = spokenEnding }
         let fitted = (tail.comma ? "," : "") + fitted(tail.continues ? Self.lowercasedFirst(chunk) : chunk, replacing: range)
@@ -202,6 +204,90 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     }
 
     nonisolated private static let closingMarks: Set<Character> = [",", ".", ";", ":", "!", "?"]
+
+    /// Drops the words (up to four) a chunk starts with when the text before already ends with them: the speaker
+    /// repeated them after a pause, and the model never saw both chunks together to merge them.
+    nonisolated static func withoutRepeatedStart(_ chunk: String, after before: String) -> String {
+        let tail = words(in: String(before.suffix(160))).suffix(4).map { $0.text.lowercased() }
+        let head = Array(words(in: chunk).prefix(4))
+        for count in stride(from: min(tail.count, head.count), through: 1, by: -1)
+        where Array(tail.suffix(count)) == head.prefix(count).map({ $0.text.lowercased() }) {
+            return String(chunk[head[count - 1].range.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
+        return chunk
+    }
+
+    nonisolated private static func words(in text: String) -> [(text: Substring, range: Range<String.Index>)] {
+        var result: [(text: Substring, range: Range<String.Index>)] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            guard text[index].isLetter || text[index].isNumber else { index = text.index(after: index); continue }
+            let start = index
+            while index < text.endIndex, text[index].isLetter || text[index].isNumber { index = text.index(after: index) }
+            result.append((text[start..<index], start..<index))
+        }
+        return result
+    }
+
+    /// A change made with the buttons on the HUD while dictating.
+    enum Edit: Sendable {
+        case deleteWord
+        case mark(String)
+        case newLine
+    }
+
+    /// What `edit` does at the end of `before`: how many characters it removes and what it inserts.
+    /// Delete takes the last word with its punctuation and the spaces around it (or a single line break);
+    /// a mark replaces the marks and spaces at the end.
+    nonisolated static func plan(_ edit: Edit, before: String) -> (remove: Int, insert: String) {
+        let chars = Array(before)
+        var start = chars.count
+        let isSpace = { (c: Character) in c == " " || c == "\t" }
+        switch edit {
+        case .deleteWord:
+            if chars.last == "\n" { return (1, "") }
+            while start > 0, isSpace(chars[start - 1]) { start -= 1 }
+            while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
+            while start > 0, isSpace(chars[start - 1]) { start -= 1 }
+            return (chars.count - start, "")
+        case .mark(let mark):
+            while start > 0, isSpace(chars[start - 1]) || closingMarks.contains(chars[start - 1]) { start -= 1 }
+            return (chars.count - start, mark)
+        case .newLine:
+            while start > 0, isSpace(chars[start - 1]) { start -= 1 }
+            return (chars.count - start, "\n")
+        }
+    }
+
+    /// Removes the dictation that is not committed yet, including chunks still being transcribed.
+    func clearDictation() {
+        anchors = [:]
+        let storage = textView.string as NSString
+        let range = NSRange(location: contextLength, length: max(0, storage.length - suffixLength - contextLength))
+        guard range.length > 0 else { return }
+        replace(range, with: NSAttributedString(string: ""), anchor: nil)
+    }
+
+    /// Text before the caret that an edit may change: the dictation, or with `includingContext` also the
+    /// app's text around it (everything was committed in the app first).
+    func textBeforeCaret(includingContext: Bool) -> String {
+        let storage = textView.string as NSString
+        let caret = min(textView.selectedRange().location, storage.length - suffixLength)
+        let start = includingContext ? 0 : min(contextLength, caret)
+        return storage.substring(with: NSRange(location: start, length: caret - start))
+    }
+
+    /// Applies a planned edit at the caret.
+    func apply(_ plan: (remove: Int, insert: String), includingContext: Bool) {
+        let before = textBeforeCaret(includingContext: includingContext)
+        let removed = String(before.suffix(plan.remove)).utf16.count
+        let caret = textView.selectedRange().location
+        let range = NSRange(location: caret - removed, length: removed)
+        // Set first: the change handler reads the dictation (the marked text in the app) during the edit.
+        if includingContext { contextLength = max(0, contextLength + (plan.insert as NSString).length - removed) }
+        replace(range, with: NSAttributedString(string: plan.insert, attributes: normalAttributes), anchor: nil)
+        if !plan.insert.isEmpty { lastEndingSpoken = true }
+    }
     /// Words that continue a sentence, so a full stop before them came from a pause, not from the speaker:
     /// (taking a comma before them, without one) per language.
     nonisolated private static let continuations: [String: (comma: Set<String>, plain: Set<String>)] = [
@@ -222,8 +308,9 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     /// How many trailing UTF-16 units of `before` the chunk replaces: the closing mark of the previous chunk
     /// when the chunk starts with punctuation, or a full stop the model put before a word that continues the
     /// sentence (`continues`; `comma`: that word takes a comma instead). `language`: the chunk's language code.
+    /// `continues`: the chunk is known to go on with the sentence (it repeated its last words).
     nonisolated static func replacedTail(of before: String, by chunk: String, keepFullStop: Bool = false,
-                                         language: String? = nil) -> (drop: Int, comma: Bool, continues: Bool) {
+                                         language: String? = nil, continues: Bool = false) -> (drop: Int, comma: Bool, continues: Bool) {
         let text = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = text.first else { return (0, false, false) }
         let tail = before.reversed().prefix { $0.isWhitespace || closingMarks.contains($0) }
@@ -231,6 +318,7 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
         if closingMarks.contains(first) { return (String(tail).utf16.count, false, false) }
         let word = text.prefix { $0.isLetter }.lowercased()
         let marks = tail.filter { closingMarks.contains($0) }
+        if continues, !keepFullStop, marks == ["."], first.isLetter { return (String(tail).utf16.count, false, true) }
         guard !keepFullStop, marks == ["."], language != nil || !ambiguous.contains(word) else { return (0, false, false) }
         let sets = language.flatMap { continuations[$0] }.map { [$0] } ?? (language == nil ? Array(continuations.values) : [])
         if sets.contains(where: { $0.comma.contains(word) }) { return (String(tail).utf16.count, true, true) }
@@ -243,7 +331,8 @@ final class LiveEditorController: NSObject, NSTextViewDelegate, NSTextStorageDel
     /// Shows a provisional transcription at the chunk's spot (greyed, replaced by later previews).
     func preview(_ id: String, with chunk: String) {
         guard let range = anchors[id] else { return }
-        let fitted = fitted(chunk, replacing: range)
+        let storage = textView.string as NSString
+        let fitted = fitted(Self.withoutRepeatedStart(chunk, after: storage.substring(to: range.location)), replacing: range)
         var attributes = normalAttributes
         attributes[.foregroundColor] = inkColor.withAlphaComponent(0.5)
         replace(range, with: NSAttributedString(string: fitted, attributes: attributes), anchor: id)

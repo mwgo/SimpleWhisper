@@ -92,6 +92,7 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.promptsProvider = { [weak self] in self?.store.prompts ?? [] }
         hud.selectedPromptID = { [weak self] in self?.settings.selectedPromptID }
         hud.onRunCommand = { [weak self] in self?.stopAndRunCommand() }
+        hud.onEdit = { [weak self] edit in self?.liveEdit(edit) }
         hud.onSelectPrompt = { [weak self] id in
             guard let self else { return }
             self.settings.selectedPromptID = id
@@ -342,6 +343,7 @@ final class DictationController: HotkeyMonitorDelegate {
         hud.showsText = settings.hudShowsText
         hud.theme = settings.hudTheme
         hud.glass = settings.hudGlass
+        hud.showsEditButtons = liveSession
         hud.show(text: "Recording", detail: selectedPrompt?.name, stage: .recording,
                  commandButton: settings.commandModeEnabled && !liveSession,
                  liveEditor: liveSession && !throughInputMethod ? liveEditor : nil)
@@ -607,6 +609,73 @@ final class DictationController: HotkeyMonitorDelegate {
         }
     }
 
+    func hotkeyBackspace(flags: CGEventFlags, continuing: Bool) -> Bool {
+        guard imeSession, liveSession, state.phase == .recording else { return false }
+        let marked = !liveEditor.shownDictation.isEmpty
+        switch flags.subtracting(.maskAlphaShift) {
+        case [] where marked || continuing:
+            liveEdit(.deleteWord)
+        case .maskCommand where marked:
+            discardLiveDictation()
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// ⌘Backspace: the marked dictation and the words being said now are thrown away.
+    private func discardLiveDictation() {
+        _ = recorder.takeSegments()
+        _ = recorder.cutOpenSegment()
+        liveActiveID = nil
+        liveEditor.clearDictation()
+    }
+
+    /// A HUD button: the words said so far are transcribed first, then the edit applies after them.
+    private func liveEdit(_ edit: LiveEditorController.Edit) {
+        guard liveSession, state.phase == .recording else { return }
+        drainLiveSegments()
+        if let samples = recorder.cutOpenSegment() {
+            enqueueLiveChunk(samples)
+        } else if let id = liveActiveID {
+            liveActiveID = nil
+            liveEditor.drop(id)
+        }
+        let generation = liveGeneration
+        let previous = liveQueue
+        liveQueue = Task { [weak self] in
+            await previous?.value
+            guard let self, generation == self.liveGeneration else { return }
+            await self.applyLiveEdit(edit)
+        }
+    }
+
+    private func applyLiveEdit(_ edit: LiveEditorController.Edit) async {
+        guard imeSession, let app = imeApp, NSWorkspace.shared.frontmostApplication == app else {
+            liveEditor.apply(LiveEditorController.plan(edit, before: liveEditor.textBeforeCaret(includingContext: false)), includingContext: false)
+            return
+        }
+        // Finished text is already in the app: commit the rest too, then edit with keys like the user would,
+        // planned on the app's own text before the caret (the editor's copy may lag behind earlier keys).
+        _ = await inputSource.flush()
+        liveEditor.freeze()
+        contextRefresh?.cancel()
+        if let context = await inputSource.connect(to: app) {
+            liveEditor.seedContext(before: context.before, after: context.after)
+        }
+        let plan = LiveEditorController.plan(edit, before: liveEditor.textBeforeCaret(includingContext: true))
+        liveEditor.apply(plan, includingContext: true)
+        imeDelivered = String(imeDelivered.dropLast(min(plan.remove, imeDelivered.count))) + plan.insert
+        HotkeyMonitor.pressBackspace(count: plan.remove)
+        switch plan.insert {
+        case "": break
+        case "\n": HotkeyMonitor.pressReturn(flags: .maskShift)
+        default: HotkeyMonitor.type(text: plan.insert)
+        }
+        // The next edit in the queue reads the app's text: let the app take these keys first.
+        try? await Task.sleep(for: .milliseconds(150))
+    }
+
     /// Every 0.4 s (when the previous one has finished), re-transcribes the utterance in progress and shows it greyed in the editor.
     private func startLivePreviewLoop() {
         livePreviewLoop?.cancel()
@@ -806,6 +875,7 @@ final class DictationController: HotkeyMonitorDelegate {
         guard imeSession, liveSession else { return }
         imeCommits += 1
         if state.phase == .recording { closeActiveUtterance() }
+        imeDelivered += liveEditor.shownDictation
         liveEditor.freeze()
         scheduleContextRefresh()
     }

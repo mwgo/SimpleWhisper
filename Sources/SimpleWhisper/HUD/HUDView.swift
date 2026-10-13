@@ -19,6 +19,8 @@ final class HUDModel {
     var stage: HUDStage = .message
     /// Shows the round "run as command" button (recording only).
     var showsCommandButton = false
+    /// Live typing: delete-word, full stop, comma and new-line buttons while recording.
+    var showsEditButtons = false
     /// When false only the animation (and the command button) is shown, no status text.
     var showsText = true
     var theme: HUDTheme = .freshGreen
@@ -55,6 +57,7 @@ struct HUDView: View {
     var onCommand: () -> Void = {}
     var onCopyResult: () -> Void = {}
     var onCloseResult: () -> Void = {}
+    var onEdit: (LiveEditorController.Edit) -> Void = { _ in }
     /// Transparent margin so the ripple can extend beyond the capsule.
     static let outerPadding: CGFloat = 14
     @State private var dropScale: CGFloat = 0.4
@@ -100,6 +103,7 @@ struct HUDView: View {
                         .contentShape(Rectangle())
                         .onTapGesture(perform: onTap)
                     Spacer(minLength: 8)
+                    if model.showsEditButtons && model.stage == .recording { editButtons }
                     cardButton(nil, systemImage: "doc.on.clipboard", help: "Paste the clipboard at the caret") { editor.pasteClipboard() }
                 }
             }
@@ -123,6 +127,32 @@ struct HUDView: View {
         }
         .scaleEffect(x: dropScale, y: 0.9 + 0.1 * dropScale, anchor: anchor)
         .opacity(dropOpacity)
+    }
+
+    /// Buttons that edit the dictation without speaking.
+    private var editButtons: some View {
+        HStack(spacing: 4) {
+            editButton(systemImage: "delete.backward", help: "Delete the last word") { onEdit(.deleteWord) }
+            editButton(text: ".", help: "Full stop") { onEdit(.mark(".")) }
+            editButton(text: ",", help: "Comma") { onEdit(.mark(",")) }
+            editButton(systemImage: "return", help: "New line") { onEdit(.newLine) }
+        }
+    }
+
+    private func editButton(systemImage: String? = nil, text: String? = nil, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: 11, weight: .bold))
+                } else if let text {
+                    Text(text).font(.system(size: 16, weight: .black, design: .rounded)).offset(y: -3.5)
+                }
+            }
+            .frame(width: 26, height: 22)
+        }
+        .buttonStyle(HUDEditButtonStyle(theme: model.theme, glass: model.glass))
+        .focusable(false)
+        .help(help)
     }
 
     private func cardButton(_ title: String?, systemImage: String, help: String, action: @escaping () -> Void) -> some View {
@@ -165,6 +195,9 @@ struct HUDView: View {
                     .font(.system(size: 9, weight: .bold))
                     .opacity(0.7)
             }
+            if model.showsEditButtons && model.stage == .recording && model.liveEditor == nil {
+                editButtons.padding(.leading, 2)
+            }
             if model.showsCommandButton && model.stage == .recording {
                 Button(action: onCommand) {
                     ZStack {
@@ -188,7 +221,7 @@ struct HUDView: View {
         statusRow()
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .hudBackground(Capsule(), theme: model.theme, glass: model.glass)
+        .hudBackground(Capsule(), theme: model.theme, glass: model.glass, clear: true)
         .overlay {
             if isBusy {
                 RainbowBorder(shape: Capsule())
@@ -221,7 +254,7 @@ struct HUDView: View {
     /// Mirror of the appear animation: the capsule folds towards its right edge and a ripple runs the same way.
     /// Anything that changes the capsule's size.
     private var layoutKey: String {
-        "\(model.text)|\(model.detail ?? "")|\(model.stage)|\(model.showsCommandButton)|\(model.showsText)"
+        "\(model.text)|\(model.detail ?? "")|\(model.stage)|\(model.showsCommandButton)|\(model.showsEditButtons)|\(model.showsText)"
     }
 
     private func playDismissAnimation() {
@@ -364,12 +397,37 @@ private struct RainbowBorder<S: InsettableShape>: View {
 private extension View {
     /// Theme-tinted Liquid Glass, or the classic solid fill with a soft shadow.
     @ViewBuilder
-    func hudBackground<S: Shape>(_ shape: S, theme: HUDTheme, glass: Bool) -> some View {
+    /// `clear`: the small capsule, where regular glass ignores the tint and shows plain grey.
+    func hudBackground<S: Shape>(_ shape: S, theme: HUDTheme, glass: Bool, clear: Bool = false) -> some View {
         if glass {
             // Only a light theme tint, so the system's glass (including a "clear" setting) shows through.
-            self.glassEffect(.regular.tint(theme.background.opacity(0.3)), in: shape)
+            self.glassEffect((clear ? Glass.clear : .regular).tint(theme.background.opacity(0.3)), in: shape)
         } else {
             self.background(shape.fill(theme.background).shadow(color: .black.opacity(0.18), radius: 6, y: 2))
         }
+    }
+}
+
+/// Small round-ended keys in the HUD: tinted with the theme, a lighter glass bead on glass.
+private struct HUDEditButtonStyle: ButtonStyle {
+    let theme: HUDTheme
+    let glass: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule()
+        configuration.label
+            .foregroundStyle(glass ? AnyShapeStyle(.primary) : AnyShapeStyle(theme.ink))
+            .background {
+                if glass {
+                    shape.fill(theme.background.opacity(configuration.isPressed ? 0.55 : 0.28))
+                        .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.08)],
+                                                                   startPoint: .top, endPoint: .bottom), lineWidth: 0.75))
+                } else {
+                    shape.fill(theme.ink.opacity(configuration.isPressed ? 0.24 : 0.12))
+                }
+            }
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
