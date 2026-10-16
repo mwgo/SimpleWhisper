@@ -420,7 +420,7 @@ final class HotkeyMonitor {
         defer { pushToTalkActive = false }
         if comboUsed { return }
         if pushToTalkActive {
-            MainActor.assumeIsolated { delegate?.hotkeyPushToTalkStop() }
+            afterEvent { $0.hotkeyPushToTalkStop() }
         } else if Date().timeIntervalSince(downAt) < holdThreshold {
             var active = false
             MainActor.assumeIsolated { active = delegate?.isDictationActive ?? false }
@@ -430,13 +430,22 @@ final class HotkeyMonitor {
                 return
             }
             isSecondPress = false
-            var started = false
+            var wasIdle = false
+            MainActor.assumeIsolated { wasIdle = !(delegate?.isDictationActive ?? false) }
+            afterEvent { $0.hotkeyToggle() }
+            recordingStartedByFnAt = wasIdle ? Date() : nil
+        }
+    }
+
+    /// Runs `action` once this event has been handled. Starting or stopping the recording takes a while and
+    /// may raise an Objective-C exception (audio device trouble); inside the tap callback either one breaks the
+    /// tap for good (no more key events at all).
+    private func afterEvent(_ action: @escaping @MainActor (HotkeyMonitorDelegate) -> Void) {
+        DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
-                let wasIdle = !(delegate?.isDictationActive ?? false)
-                delegate?.hotkeyToggle()
-                started = wasIdle
+                guard let delegate = self?.delegate else { return }
+                action(delegate)
             }
-            recordingStartedByFnAt = started ? Date() : nil
         }
     }
 

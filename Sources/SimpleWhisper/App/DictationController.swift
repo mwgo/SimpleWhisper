@@ -68,6 +68,8 @@ final class DictationController: HotkeyMonitorDelegate {
     private var imeCommits = 0
     /// Finished utterances already inserted in the app during this dictation.
     private var imeDelivered = ""
+    /// Until then, typing reported by the input method comes from SimpleWhisper's own edit keys.
+    private var ownKeysUntil = Date.distantPast
     /// The dictation was finished with Return: press it in the app once the text is in.
     private var returnAfterDelivery = false
     private var contextRefresh: Task<Void, Never>?
@@ -84,7 +86,11 @@ final class DictationController: HotkeyMonitorDelegate {
             self.inputSource.mark(self.liveEditor.shownDictation)
         }
         inputSource.onCommitted = { [weak self] in self?.inputMethodCommitted() }
-        inputSource.onInput = { [weak self] in self?.scheduleContextRefresh() }
+        inputSource.onInput = { [weak self] in
+            // Keys SimpleWhisper sent itself: the editor already knows the result.
+            guard let self, Date() >= self.ownKeysUntil else { return }
+            self.scheduleContextRefresh()
+        }
         InputSourceBridge.updateInstalledCopy()
         recorder.onSegmentsAvailable = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.drainLiveSegments() } }
@@ -662,14 +668,16 @@ final class DictationController: HotkeyMonitorDelegate {
             liveEditor.apply(LiveEditorController.plan(edit, before: liveEditor.textBeforeCaret(includingContext: false)), includingContext: false)
             return
         }
-        // Finished text is already in the app: commit the rest too, then edit with keys like the user would,
-        // planned on the app's own text before the caret (the editor's copy may lag behind earlier keys).
+        // Finished text is already in the app: commit the rest too, then edit with keys like the user would.
+        // Planned on the editor's copy, which mirrors every key sent: some apps (Teams) keep reporting
+        // the text as it was before the last edits.
+        ownKeysUntil = Date().addingTimeInterval(1)
+        let hadMarked = !liveEditor.shownDictation.isEmpty
         _ = await inputSource.flush()
         liveEditor.freeze()
         contextRefresh?.cancel()
-        if let context = await inputSource.connect(to: app) {
-            liveEditor.seedContext(before: context.before, after: context.after)
-        }
+        // Chromium-based apps take a moment to finish the composition before they accept keys.
+        if hadMarked { try? await Task.sleep(for: .milliseconds(120)) }
         let plan = LiveEditorController.plan(edit, before: liveEditor.textBeforeCaret(includingContext: true))
         liveEditor.apply(plan, includingContext: true)
         imeDelivered = String(imeDelivered.dropLast(min(plan.remove, imeDelivered.count))) + plan.insert
@@ -680,8 +688,9 @@ final class DictationController: HotkeyMonitorDelegate {
         // Plain text only, whatever else the clipboard holds; the input method inserts it in one piece.
         case .paste: inputSource.commit(plan.insert, keepingMarked: "")
         }
-        // The next edit in the queue reads the app's text: let the app take these keys first.
+        // Let the app take these keys before the next edit sends more.
         try? await Task.sleep(for: .milliseconds(150))
+        ownKeysUntil = Date().addingTimeInterval(0.5)
     }
 
     /// Every 0.4 s (when the previous one has finished), re-transcribes the utterance in progress and shows it greyed in the editor.

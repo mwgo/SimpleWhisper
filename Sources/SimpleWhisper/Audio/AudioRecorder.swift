@@ -17,7 +17,7 @@ enum RecorderError: LocalizedError {
 final class AudioRecorder {
     static let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
 
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var samples: [Float] = []
     private let lock = NSLock()
@@ -38,6 +38,9 @@ final class AudioRecorder {
             segmenter.reset()
             readySegments = []
         }
+        // A fresh engine each time: one kept from before a microphone change still reports the old device's
+        // format, and installing a tap with it raises an exception Swift cannot catch.
+        engine = AVAudioEngine()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw RecorderError.noInputDevice }
