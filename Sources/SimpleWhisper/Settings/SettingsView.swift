@@ -142,7 +142,10 @@ struct GeneralSettingsView: View {
                 Toggle("Live typing", isOn: Binding(get: { settings.liveTypingEnabled }, set: { settings.liveTypingEnabled = $0 }))
                 Text("An editor opens under the HUD and fills with text at every pause. Click to move the caret and keep dictating there, or edit with the keyboard. Stop dictation (fn, or release fn in push-to-talk) to insert the text; Esc discards it.")
                     .font(.caption).foregroundStyle(.secondary)
-                if settings.liveTypingEnabled { InputSourceRow() }
+                if settings.liveTypingEnabled {
+                    InputSourceRow()
+                    Toggle("Switch to the SimpleWhisper input source when dictation starts", isOn: Binding(get: { settings.selectInputSourceOnDictation }, set: { settings.selectInputSourceOnDictation = $0 }))
+                }
             }
             Section("History") {
                 Toggle("Keep a history of recent dictations and commands", isOn: Binding(get: { settings.historyEnabled }, set: { settings.historyEnabled = $0 }))

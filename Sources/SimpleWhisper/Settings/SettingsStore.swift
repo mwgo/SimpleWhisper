@@ -43,6 +43,10 @@ final class AppSettings {
     var liveTypingEnabled: Bool {
         didSet { defaults.set(liveTypingEnabled, forKey: "liveTypingEnabled") }
     }
+    /// Live typing selects the SimpleWhisper input source when another one is selected.
+    var selectInputSourceOnDictation: Bool {
+        didSet { defaults.set(selectInputSourceOnDictation, forKey: "selectInputSourceOnDictation") }
+    }
     /// Install new GitHub releases automatically (checked at launch and every 6 hours).
     var autoUpdateEnabled: Bool {
         didSet { defaults.set(autoUpdateEnabled, forKey: "autoUpdateEnabled") }
@@ -160,6 +164,7 @@ final class AppSettings {
         hudGlass = defaults.object(forKey: "hudGlass") as? Bool ?? true
         soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
         liveTypingEnabled = defaults.bool(forKey: "liveTypingEnabled")
+        selectInputSourceOnDictation = defaults.object(forKey: "selectInputSourceOnDictation") as? Bool ?? true
         noiseFilterEnabled = defaults.object(forKey: "noiseFilterEnabled") as? Bool ?? true
         autoUpdateEnabled = defaults.bool(forKey: "autoUpdateEnabled")
         hudTheme = HUDTheme(rawValue: defaults.string(forKey: "hudTheme") ?? "") ?? .freshGreen

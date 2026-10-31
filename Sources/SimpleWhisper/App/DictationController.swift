@@ -323,7 +323,12 @@ final class DictationController: HotkeyMonitorDelegate {
         returnAfterDelivery = false
         imeSession = false
         imeDelivered = ""
-        let throughInputMethod = liveSession && InputSourceBridge.status == .selected
+        var switchedSource = false
+        if liveSession, settings.selectInputSourceOnDictation, InputSourceBridge.status == .notSelected {
+            switchedSource = InputSourceBridge.select()
+            DebugLog.write("Input method: selected the SimpleWhisper input source (\(switchedSource ? "done" : "failed"))")
+        }
+        let throughInputMethod = liveSession && (switchedSource || InputSourceBridge.status == .selected)
         recorder.segmentsEnabled = liveSession
         if liveSession {
             liveGeneration += 1
@@ -358,7 +363,7 @@ final class DictationController: HotkeyMonitorDelegate {
         if engines[settings.engineKind]?.isReady != true {
             Task { await loadModel() }
         }
-        if throughInputMethod { connectInputMethod() }
+        if throughInputMethod { connectInputMethod(justSelected: switchedSource) }
         if liveSession { startLivePreviewLoop() }
     }
 
@@ -866,13 +871,19 @@ final class DictationController: HotkeyMonitorDelegate {
 
     /// Asks the input method for the focused field of the app being dictated into; without an answer
     /// the session falls back to the HUD editor.
-    private func connectInputMethod() {
+    /// `justSelected`: the source was selected a moment ago; the app needs a moment to hand it the text field.
+    private func connectInputMethod(justSelected: Bool = false) {
         let generation = liveGeneration
         let app = NSWorkspace.shared.frontmostApplication
         imeApp = app
         Task { [weak self] in
             guard let self else { return }
-            let before = await self.inputSource.connect(to: app)
+            var before = await self.inputSource.connect(to: app)
+            for _ in 0..<(justSelected ? 6 : 0) where before == nil {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard generation == self.liveGeneration else { return }
+                before = await self.inputSource.connect(to: app)
+            }
             guard generation == self.liveGeneration, self.liveSession, self.state.phase == .recording else { return }
             if let context = before {
                 self.liveEditor.seedContext(before: context.before, after: context.after)

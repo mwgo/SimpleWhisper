@@ -138,6 +138,14 @@ final class InputSourceBridge {
         return enabled.isEmpty ? .notEnabled : .notSelected
     }
 
+    /// Selects the SimpleWhisper input source; false when it is not added in Keyboard settings.
+    static func select() -> Bool {
+        let sources = TISCreateInputSourceList([kTISPropertyInputSourceID: sourceID] as CFDictionary, false)?
+            .takeRetainedValue() as? [TISInputSource] ?? []
+        guard let source = sources.first else { return false }
+        return TISSelectInputSource(source) == noErr
+    }
+
     /// Copies the input method to ~/Library/Input Methods and registers it. The user then adds it in
     /// Keyboard settings (macOS does not let apps enable input methods themselves).
     static func install() throws {
